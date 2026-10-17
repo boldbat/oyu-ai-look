@@ -1,0 +1,622 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Oyu AI · synthetic real Decart smoke test</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 28px;
+        background: #f5f2f8;
+        color: #302739;
+        font:
+          15px/1.55 system-ui,
+          sans-serif;
+      }
+      main {
+        max-width: 1100px;
+        margin: auto;
+      }
+      h1 {
+        font-size: 27px;
+      }
+      h2 {
+        font-size: 16px;
+      }
+      .notice,
+      .views section,
+      #result {
+        padding: 18px;
+        border: 1px solid #d9cfe1;
+        border-radius: 12px;
+        background: white;
+      }
+      .notice strong {
+        color: #63487d;
+      }
+      button {
+        padding: 12px 18px;
+        margin-right: 8px;
+        border: 0;
+        border-radius: 9px;
+        color: white;
+        background: #78628f;
+        font: inherit;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .views {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin: 22px 0;
+      }
+      video {
+        width: 100%;
+        aspect-ratio: 16 / 9;
+        background: #292231;
+        object-fit: contain;
+      }
+      .garment {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+      }
+      .garment img {
+        width: 80px;
+        height: 90px;
+        object-fit: contain;
+      }
+      #source {
+        display: none;
+      }
+      #status {
+        font-weight: 650;
+      }
+      #result {
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        font:
+          13px/1.6 ui-monospace,
+          monospace;
+      }
+      .pass {
+        color: #327441;
+      }
+      .fail {
+        color: #a64040;
+      }
+      @media (max-width: 650px) {
+        body {
+          padding: 16px;
+        }
+        .views {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Synthetic real Decart smoke test</h1>
+      <p class="notice">
+        <strong
+          >This button starts a real Decart provider connection and may use provider
+          credits.</strong
+        >
+        It sends only an animated mannequin drawn by this page and the two bundled garments shown
+        below. It starts with navy, then changes to beige within the same connection after the first
+        decoded frame. It never requests a camera or microphone and uses no personal media. The
+        server reserves at most 30 seconds; this test stops one second after the provider
+        acknowledges the change, or fails and stops within 24 seconds. A pass verifies provider
+        video connectivity, reference-change acknowledgement, and cleanup, not visual try-on
+        quality.
+      </p>
+      <div class="garment">
+        <img src="/assets/navy-top.png" alt="Bundled navy garment reference" />
+        <img src="/assets/beige-top.png" alt="Bundled beige garment replacement" />
+        <p>
+          Fixed public references: <code>/assets/navy-top.png</code> →
+          <code>/assets/beige-top.png</code><br />Synthetic canvas input: 1280 × 720 at 15 frames
+          per second.
+        </p>
+      </div>
+      <button id="run" type="button">Start real Decart synthetic test</button>
+      <button id="stop" type="button" disabled>Stop immediately</button>
+      <p id="status" role="status">Ready. No provider connection has been started.</p>
+      <div class="views">
+        <section>
+          <h2>Drawn mannequin input · no camera</h2>
+          <video id="local" muted playsinline autoplay></video>
+        </section>
+        <section>
+          <h2>Real Decart return stream</h2>
+          <video id="remote" muted playsinline autoplay></video>
+        </section>
+      </div>
+      <canvas id="source" width="1280" height="720"></canvas>
+      <pre id="result" aria-live="polite">{"status":"NOT_RUN","syntheticMediaOnly":true}</pre>
+      <section id="metrics" aria-label="Compact test metrics" aria-live="polite"></section>
+    </main>
+    <script type="module">
+      import { BrowserLiveCamera } from '/src/lib/live-camera.ts';
+      import {
+        createDecartSocket,
+        updateDecartReference,
+        decartStatus,
+        decartErrorMessage,
+      } from '/src/lib/decart-api.ts';
+
+      const run = document.getElementById('run'),
+        stop = document.getElementById('stop');
+      const status = document.getElementById('status'),
+        result = document.getElementById('result');
+      const local = document.getElementById('local'),
+        remote = document.getElementById('remote');
+      const canvas = document.getElementById('source');
+      const metrics = document.getElementById('metrics');
+      let cleanup = null;
+
+      run.addEventListener('click', async () => {
+        if (cleanup) return;
+        run.disabled = true;
+        stop.disabled = false;
+        status.className = '';
+        metrics.replaceChildren();
+        status.textContent = 'Checking the real provider configuration…';
+        result.textContent = JSON.stringify(
+          { status: 'RUNNING', syntheticMediaOnly: true },
+          null,
+          2,
+        );
+        const began = performance.now(),
+          operation = new AbortController();
+        const tracks = new Set(),
+          peers = new Set(),
+          phases = [],
+          signalTypes = new Set();
+        let done = false,
+          state = null,
+          controller = null,
+          stream = null,
+          socket = null;
+        let drawTimer = null,
+          pollTimer = null,
+          deadlineTimer = null,
+          successTimer = null,
+          callbackId = null;
+        let canvasFrames = 0,
+          callbackFrames = 0,
+          presentedFrames = 0,
+          inboundDecodedFrames = 0;
+        let inboundBytes = 0,
+          firstLiveAtMs = null,
+          providerConnectionAttempted = false,
+          model = null;
+        let referenceRequested = false,
+          referenceApplied = false,
+          referenceAppliedAtMs = null;
+        const referenceEvents = [];
+
+        function rememberStream(value) {
+          value?.getTracks().forEach((track) => tracks.add(track));
+        }
+        function observeFrames() {
+          if (done || typeof remote.requestVideoFrameCallback !== 'function') return;
+          callbackId = remote.requestVideoFrameCallback((_time, metadata) => {
+            if (done) return;
+            callbackFrames++;
+            presentedFrames = Math.max(presentedFrames, metadata.presentedFrames || 0);
+            observeFrames();
+          });
+        }
+        async function sampleStats() {
+          for (const peer of peers) {
+            if (done || peer.connectionState === 'closed') return;
+            try {
+              const reports = await peer.getStats();
+              if (done) return;
+              reports.forEach((report) => {
+                if (
+                  report.type === 'inbound-rtp' &&
+                  (report.kind ?? report.mediaType) === 'video'
+                ) {
+                  inboundDecodedFrames = Math.max(
+                    inboundDecodedFrames,
+                    Number(report.framesDecoded) || 0,
+                  );
+                  inboundBytes = Math.max(inboundBytes, Number(report.bytesReceived) || 0);
+                }
+              });
+            } catch {
+              /* A closing peer may no longer expose stats. */
+            }
+          }
+        }
+        async function finish(requestedStatus, reason) {
+          if (done) return;
+          const width = remote.videoWidth,
+            height = remote.videoHeight;
+          const totalVideoFrames = remote.getVideoPlaybackQuality?.().totalVideoFrames ?? 0;
+          const decodedEvidence =
+            callbackFrames > 0 || inboundDecodedFrames > 0 || totalVideoFrames > 0;
+          const receivedVideo =
+            state?.phase === 'live' &&
+            state.hasRemoteFrame &&
+            width > 0 &&
+            height > 0 &&
+            decodedEvidence;
+          const observed = {
+            status: requestedStatus,
+            reason,
+            provider: 'Decart',
+            model,
+            providerConnectionAttempted,
+            syntheticMediaOnly: true,
+            cameraRequested: false,
+            microphoneRequested: false,
+            garmentAsset: '/assets/navy-top.png',
+            replacementAsset: '/assets/beige-top.png',
+            referenceRequested,
+            referenceApplied,
+            referenceAppliedAtMs,
+            referenceEvents: [...referenceEvents],
+            reservedMaximumSeconds: 30,
+            elapsedMs: Math.round(performance.now() - began),
+            firstLiveAtMs,
+            phaseBeforeStop: state?.phase ?? 'idle',
+            hasRemoteFrame: state?.hasRemoteFrame ?? false,
+            dimensions: { width, height },
+            frameEvidence: {
+              canvasFrames,
+              callbackFrames,
+              presentedFrames,
+              totalVideoFrames,
+              inboundDecodedFrames,
+              inboundBytes,
+            },
+            phases: [...phases],
+            signalTypes: [...signalTypes],
+          };
+          done = true;
+          clearInterval(drawTimer);
+          clearInterval(pollTimer);
+          clearTimeout(deadlineTimer);
+          clearTimeout(successTimer);
+          if (callbackId !== null) remote.cancelVideoFrameCallback?.(callbackId);
+          rememberStream(stream);
+          rememberStream(state?.localStream);
+          rememberStream(state?.remoteStream);
+          // Send stop before abort closes the transport; server closure also ends the provider lease.
+          controller?.stop('live_smoke_test_complete');
+          operation.abort();
+          try {
+            socket?.close(1000, 'Synthetic smoke test complete');
+          } catch {
+            /* Already closed. */
+          }
+          for (const track of tracks) {
+            track.enabled = false;
+            track.stop();
+          }
+          for (const peer of peers) if (peer.connectionState !== 'closed') peer.close();
+          for (const video of [local, remote]) {
+            video.pause();
+            video.srcObject = null;
+          }
+          // Safari may publish a track's ended state after stop() returns. Media
+          // and transport stop above, immediately; only observation waits here.
+          const trackStates = () =>
+            [...tracks].map((track, index) => ({
+              index,
+              source: stream?.getTracks().includes(track) ? 'synthetic-input' : 'provider-return',
+              kind: track.kind,
+              readyState: track.readyState,
+              enabled: track.enabled,
+            }));
+          observed.trackStatesBeforeWait = trackStates();
+          const cleanupBegan = performance.now();
+          status.textContent =
+            'Provider stopped. Checking ended media states for up to one second…';
+          await new Promise((resolve) => {
+            const deadline = cleanupBegan + 1000;
+            const check = () => {
+              const remaining = deadline - performance.now();
+              if ([...tracks].every((track) => track.readyState === 'ended') || remaining <= 0)
+                resolve();
+              else setTimeout(check, Math.min(25, remaining));
+            };
+            check();
+          });
+          observed.cleanupWaitMs = Math.round(performance.now() - cleanupBegan);
+          observed.stoppedAtMs = observed.elapsedMs;
+          observed.elapsedMs = Math.round(performance.now() - began);
+          observed.trackStates = trackStates();
+          observed.trackCount = tracks.size;
+          observed.allTracksEnded = [...tracks].every((track) => track.readyState === 'ended');
+          observed.allPeersClosed = [...peers].every((peer) => peer.connectionState === 'closed');
+          observed.videosDetached = local.srcObject === null && remote.srcObject === null;
+          observed.socketClosedOrClosing = socket === null || socket.readyState >= 2;
+          observed.cleanupPassed =
+            observed.allTracksEnded &&
+            observed.allPeersClosed &&
+            observed.videosDetached &&
+            observed.socketClosedOrClosing;
+          if (
+            requestedStatus === 'PASS' &&
+            (!receivedVideo || !referenceApplied || !observed.cleanupPassed)
+          ) {
+            observed.status = 'FAIL';
+            observed.reason = !receivedVideo
+              ? 'No decoded provider frame evidence at completion.'
+              : !referenceApplied
+                ? 'The provider did not acknowledge the in-session garment change.'
+                : 'Media cleanup did not complete.';
+          }
+          result.textContent = JSON.stringify(observed, null, 2);
+          const rows = [
+            `Result: ${observed.status}. First live: ${observed.firstLiveAtMs ?? 'none'} ms. Stopped: ${observed.stoppedAtMs} ms. Complete: ${observed.elapsedMs} ms.`,
+            `Video: ${width} × ${height}. Callback frames: ${callbackFrames}. Decoded frames: ${inboundDecodedFrames}. Inbound bytes: ${inboundBytes}.`,
+            `Garment change: requested=${referenceRequested}, applied=${referenceApplied}, applied at=${referenceAppliedAtMs ?? 'none'} ms. Events: ${referenceEvents.join(', ') || 'none'}.`,
+            `Cleanup: ${observed.cleanupPassed}. Wait: ${observed.cleanupWaitMs} ms. Track count: ${observed.trackCount}. All tracks ended: ${observed.allTracksEnded}.`,
+            `Peers closed: ${observed.allPeersClosed}. Videos detached: ${observed.videosDetached}. Socket closed or closing: ${observed.socketClosedOrClosing}.`,
+            ...observed.trackStates.map((track) => {
+              const initial = observed.trackStatesBeforeWait[track.index];
+              return `Track ${track.index}: ${track.source}, ${track.kind}, initial=${initial.readyState}, final=${track.readyState}, enabled=${track.enabled}.`;
+            }),
+          ];
+          metrics.replaceChildren(
+            ...rows.map((text) => {
+              const paragraph = document.createElement('p');
+              paragraph.textContent = text;
+              return paragraph;
+            }),
+          );
+          status.className = observed.status === 'PASS' ? 'pass' : 'fail';
+          status.textContent = `${observed.status} — ${observed.reason}`;
+          cleanup = null;
+          run.disabled = false;
+          stop.disabled = true;
+        }
+        cleanup = () =>
+          finish(
+            'STOPPED',
+            'Stopped explicitly; all local media and the provider connection were released.',
+          );
+        deadlineTimer = setTimeout(
+          () =>
+            finish(
+              'FAIL',
+              'No complete decoded-frame and garment-change result within the 23-second connection deadline.',
+            ),
+          23_000,
+        );
+
+        try {
+          if (!canvas.captureStream || !globalThis.RTCPeerConnection)
+            throw new Error('Canvas capture or WebRTC is unavailable in this browser.');
+          const configured = await decartStatus(operation.signal);
+          if (done) return;
+          model = configured.model;
+          if (!configured.configured)
+            throw new Error('The real Decart provider is not configured on this server.');
+          const [garment, replacement] = await Promise.all(
+            ['/assets/navy-top.png', '/assets/beige-top.png'].map(async (path) => {
+              const response = await fetch(path, {
+                cache: 'no-store',
+                credentials: 'omit',
+                redirect: 'error',
+                signal: operation.signal,
+              });
+              if (!response.ok)
+                throw new Error('A bundled public garment image could not be loaded.');
+              return response.blob();
+            }),
+          );
+          if (done) return;
+          const context = canvas.getContext('2d');
+          if (!context) throw new Error('The synthetic drawing context is unavailable.');
+          function paint() {
+            canvasFrames++;
+            const sway = Math.sin(canvasFrames / 18) * 7;
+            const gradient = context.createLinearGradient(0, 0, 0, 720);
+            gradient.addColorStop(0, '#e4e1dc');
+            gradient.addColorStop(1, '#c7c3bd');
+            context.fillStyle = gradient;
+            context.fillRect(0, 0, 1280, 720);
+            context.fillStyle = '#b2afa9';
+            context.fillRect(0, 656, 1280, 64);
+            context.fillStyle = '#4e5459';
+            context.font = '22px sans-serif';
+            context.fillText('SYNTHETIC MANNEQUIN · NO CAMERA', 35, 45);
+            context.font = '17px monospace';
+            context.fillText(`Drawn frame ${canvasFrames}`, 35, 690);
+            context.save();
+            context.translate(640 + sway, 0);
+            context.fillStyle = '#96938d';
+            context.beginPath();
+            context.ellipse(0, 665, 126, 20, 0, 0, Math.PI * 2);
+            context.fill();
+            // Full-body, front-facing drawn mannequin. All shapes are local canvas primitives.
+            context.fillStyle = '#b89b80';
+            context.fillRect(-21, 160, 42, 47);
+            context.beginPath();
+            context.ellipse(0, 111, 49, 63, 0, 0, Math.PI * 2);
+            context.fill();
+            context.fillStyle = '#37322f';
+            context.beginPath();
+            context.ellipse(0, 71, 47, 25, 0, Math.PI, 2 * Math.PI);
+            context.fill();
+            context.fillStyle = '#51463e';
+            context.beginPath();
+            context.arc(-16, 110, 3, 0, Math.PI * 2);
+            context.arc(16, 110, 3, 0, Math.PI * 2);
+            context.fill();
+            context.strokeStyle = '#826c59';
+            context.lineWidth = 2;
+            context.beginPath();
+            context.moveTo(-11, 140);
+            context.lineTo(11, 140);
+            context.stroke();
+            context.fillStyle = '#b89b80';
+            for (const side of [-1, 1]) {
+              context.save();
+              context.translate(side * 93, 217);
+              context.rotate(side * (-0.12 + Math.sin(canvasFrames / 20) * 0.035));
+              context.fillRect(side < 0 ? -30 : 0, 0, 30, 196);
+              context.beginPath();
+              context.ellipse(side * 15, 205, 18, 27, 0, 0, Math.PI * 2);
+              context.fill();
+              context.restore();
+            }
+            context.fillStyle = '#f4f2eb';
+            context.beginPath();
+            context.moveTo(-39, 190);
+            context.lineTo(-108, 214);
+            context.lineTo(-91, 277);
+            context.lineTo(-72, 268);
+            context.lineTo(-67, 408);
+            context.lineTo(67, 408);
+            context.lineTo(72, 268);
+            context.lineTo(91, 277);
+            context.lineTo(108, 214);
+            context.lineTo(39, 190);
+            context.quadraticCurveTo(0, 221, -39, 190);
+            context.fill();
+            context.strokeStyle = '#d8d5cc';
+            context.lineWidth = 3;
+            context.beginPath();
+            context.moveTo(-53, 294);
+            context.lineTo(-48, 389);
+            context.moveTo(53, 294);
+            context.lineTo(48, 389);
+            context.stroke();
+            context.fillStyle = '#555e6b';
+            context.beginPath();
+            context.moveTo(-67, 408);
+            context.lineTo(67, 408);
+            context.lineTo(59, 635);
+            context.lineTo(13, 635);
+            context.lineTo(0, 468);
+            context.lineTo(-13, 635);
+            context.lineTo(-59, 635);
+            context.closePath();
+            context.fill();
+            context.fillStyle = '#33383f';
+            context.beginPath();
+            context.ellipse(-39, 648, 36, 17, -0.08, 0, Math.PI * 2);
+            context.ellipse(39, 648, 36, 17, 0.08, 0, Math.PI * 2);
+            context.fill();
+            context.restore();
+          }
+          paint();
+          drawTimer = setInterval(paint, 1000 / 15);
+          stream = canvas.captureStream(15);
+          rememberStream(stream);
+          controller = new BrowserLiveCamera({
+            localVideo: local,
+            remoteVideo: remote,
+            // This injected source is the only media acquisition path. No navigator media API is called.
+            getUserMedia: async () => stream,
+            createPeer: (configuration) => {
+              const peer = new RTCPeerConnection(configuration);
+              peers.add(peer);
+              return peer;
+            },
+            isContextCurrent: () => !done,
+            onSelectEvent: (event) => {
+              if (done || event.seq !== 1 || !referenceRequested) return;
+              referenceEvents.push(event.type);
+              if (event.type === 'rejected') {
+                void finish(
+                  'FAIL',
+                  `The in-session garment change was rejected: ${event.code ?? 'unknown'}.`,
+                );
+              } else if (event.type === 'applied' && !referenceApplied) {
+                referenceApplied = true;
+                referenceAppliedAtMs = Math.round(performance.now() - began);
+                successTimer = setTimeout(
+                  () =>
+                    finish(
+                      'PASS',
+                      'Real Decart video decoded and the in-session garment change was acknowledged; media stopped one second later.',
+                    ),
+                  1000,
+                );
+              }
+            },
+            onState: (next) => {
+              state = next;
+              rememberStream(next.localStream);
+              rememberStream(next.remoteStream);
+              if (done) return;
+              if (phases.at(-1) !== next.phase) phases.push(next.phase);
+              status.textContent = `Real Decart synthetic test: ${next.phase}${next.code ? ` · ${next.code}` : ''}`;
+              if (next.phase === 'failed' || next.phase === 'stopped')
+                queueMicrotask(() =>
+                  finish('FAIL', next.code || 'The live connection ended before completion.'),
+                );
+              if (next.phase === 'live' && next.hasRemoteFrame && firstLiveAtMs === null) {
+                firstLiveAtMs = Math.round(performance.now() - began);
+                void sampleStats();
+                referenceRequested = true;
+                void updateDecartReference(socket, replacement, 1, operation.signal).catch(
+                  (error) => {
+                    if (!done)
+                      void finish(
+                        'FAIL',
+                        `Could not submit the garment change: ${decartErrorMessage(error)}`,
+                      );
+                  },
+                );
+              }
+            },
+          });
+          observeFrames();
+          await controller.prepare();
+          if (done) return;
+          providerConnectionAttempted = true;
+          const connected = await createDecartSocket(garment, 30, operation.signal);
+          if (done) {
+            connected.socket.close();
+            return;
+          }
+          socket = connected.socket;
+          // Retain message types only; SDP, ICE addresses, and tickets never enter test output.
+          socket.addEventListener('message', (event) => {
+            try {
+              const message = JSON.parse(event.data);
+              if (typeof message.type === 'string') signalTypes.add(message.type);
+            } catch {
+              /* The controller validates actual protocol messages. */
+            }
+          });
+          controller.start({
+            socket,
+            maxDurationSeconds: connected.maxDurationSeconds,
+            offerBeforeReady: true,
+          });
+          pollTimer = setInterval(() => {
+            void sampleStats();
+          }, 250);
+        } catch (error) {
+          if (!done)
+            finish(
+              'FAIL',
+              typeof error?.code === 'string'
+                ? `${error.code}: ${decartErrorMessage(error)}`
+                : error instanceof Error
+                  ? error.message
+                  : 'The synthetic test could not start.',
+            );
+        }
+      });
+      stop.addEventListener('click', () => cleanup?.());
+      window.addEventListener('pagehide', () => cleanup?.());
+    </script>
+  </body>
+</html>

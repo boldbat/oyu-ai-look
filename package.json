@@ -1,0 +1,32 @@
+{
+  "name": "oyu-ai-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc -b && vite build",
+    "preview": "npm run start",
+    "test": "vitest run",
+    "typecheck": "tsc -b --pretty false",
+    "format": "prettier --write src tests docs *.json *.ts index.html README.md",
+    "start": "node --env-file-if-exists=.env.local server/index.mjs"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.1.2",
+    "lucide-react": "^0.468.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.4",
+    "ws": "^8.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@types/ws": "^8.18.2",
+    "prettier": "^3.9.10",
+    "vitest": "^5.0.4"
+  }
+}

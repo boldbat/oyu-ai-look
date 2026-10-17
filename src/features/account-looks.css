@@ -1,0 +1,396 @@
+.account-looks {
+  color: var(--ink);
+}
+.account-looks-toolbar,
+.account-looks-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.account-looks-toolbar {
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin: 16px 0 22px;
+}
+.account-looks-switch {
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+}
+.account-looks-switch button {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--secondary);
+  font: inherit;
+  font-size: 12px;
+  padding: 9px 11px;
+  cursor: pointer;
+}
+.account-looks-switch button[aria-pressed='true'] {
+  background: var(--muted-surface);
+  color: var(--ink);
+}
+.account-looks .account-section-heading {
+  gap: 16px;
+  align-items: flex-start;
+}
+.account-looks .account-section-heading > div:first-child {
+  min-width: 0;
+}
+.account-looks .account-section-heading h4 {
+  overflow-wrap: anywhere;
+}
+.account-looks .account-section-heading p {
+  margin: 8px 0 0;
+  max-width: 420px;
+}
+.account-looks .account-section-heading > .account-button {
+  flex-shrink: 0;
+}
+.account-looks .account-success,
+.account-looks .account-error {
+  margin: 14px 0;
+}
+.account-looks .account-error p {
+  margin: 0 0 8px;
+}
+.account-looks .account-action-row {
+  align-items: center;
+  margin-top: 17px;
+}
+.account-looks .account-action-row > .account-caption {
+  margin-right: auto;
+}
+.account-look-composer,
+.account-wear-form {
+  padding: 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 13px;
+  margin-bottom: 24px;
+}
+.account-look-name,
+.account-look-slots label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.account-look-name input,
+.account-look-slots select,
+.account-history-navigation input {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 9px;
+  min-height: 43px;
+  width: 100%;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 400;
+  box-sizing: border-box;
+}
+.account-look-name input:focus-visible,
+.account-look-slots select:focus-visible,
+.account-history-navigation input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.account-look-type {
+  display: flex;
+  gap: 17px;
+  border: 0;
+  padding: 0;
+  margin: 18px 0;
+  font-size: 12px;
+}
+.account-look-type legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: 10px;
+}
+.account-look-type label {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+}
+.account-look-type input,
+.account-wear-choices input {
+  accent-color: var(--accent);
+}
+.account-look-slots {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+}
+.account-look-slots label {
+  position: relative;
+  min-width: 0;
+}
+.account-look-slots label > span {
+  font-size: 10px;
+  color: var(--secondary);
+  font-weight: 400;
+}
+.account-look-slots select {
+  font-size: 12px;
+}
+.account-look-composer > .account-caption {
+  margin: 15px 0 0;
+}
+.account-saved-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 13px;
+  margin: 18px 0;
+}
+.account-saved-look {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 17px;
+  min-width: 0;
+}
+.account-saved-look > .account-section-heading {
+  margin: 0 0 17px;
+}
+.account-saved-look h4 {
+  margin-top: 10px;
+}
+.account-look-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.account-look-items li {
+  display: flex;
+  gap: 9px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  align-items: flex-start;
+}
+.account-look-items li > svg {
+  color: var(--secondary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.account-look-items strong {
+  font-size: 12px;
+  font-weight: 500;
+  display: block;
+  overflow-wrap: anywhere;
+}
+.account-look-items li span {
+  font-size: 10px;
+  color: var(--secondary);
+  display: block;
+  margin-top: 5px;
+  line-height: 1.5;
+}
+.account-look-delete {
+  border-top: 1px solid var(--border);
+  padding-top: 13px;
+  margin-top: 12px;
+}
+.account-look-delete p {
+  font-size: 12px;
+  color: var(--secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+.account-look-delete .account-action-row {
+  gap: 7px;
+}
+.account-look-delete .account-button {
+  font-size: 11px;
+  padding: 8px 11px;
+  min-height: 36px;
+}
+.account-wear-form > .account-look-name {
+  max-width: 240px;
+}
+.account-wear-form > .account-caption {
+  margin-top: 14px;
+}
+.account-wear-choices {
+  border: 0;
+  padding: 0;
+  margin: 18px 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+  max-height: 280px;
+  overflow: auto;
+}
+.account-wear-choices legend {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  padding: 0;
+}
+.account-wear-choices label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  cursor: pointer;
+  min-width: 0;
+}
+.account-wear-choices label:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--muted-surface);
+}
+.account-wear-choices label:has(input:disabled) {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.account-wear-choices input {
+  margin: 0;
+  flex-shrink: 0;
+}
+.account-wear-choices svg {
+  flex-shrink: 0;
+  color: var(--secondary);
+}
+.account-wear-choices strong {
+  display: block;
+  font-size: 11px;
+  line-height: 1.4;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.account-wear-choices small {
+  display: block;
+  font-size: 10px;
+  color: var(--secondary);
+  line-height: 1.4;
+  margin-top: 4px;
+}
+.account-recorded-note {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  color: var(--secondary);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.account-recorded-note svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.account-history-navigation {
+  align-items: center !important;
+}
+.account-history-navigation > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.account-history-navigation input {
+  font-size: 12px;
+  min-height: 38px;
+  padding: 8px;
+}
+.account-journal-days {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+.account-journal-days article {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 17px;
+}
+.account-journal-days article > div {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.account-journal-days h5 {
+  font-size: 12px;
+  margin: 0;
+  font-weight: 600;
+}
+.account-journal-days article > div > span {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--secondary);
+}
+.account-journal-days article > div > svg {
+  color: var(--secondary);
+}
+.account-journal-days ul {
+  padding: 0;
+  margin: 13px 0;
+  list-style: none;
+}
+.account-journal-days li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.account-journal-days li strong {
+  font-weight: 500;
+  overflow-wrap: anywhere;
+}
+.account-journal-days li span {
+  color: var(--secondary);
+  text-align: right;
+}
+.account-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+@media (max-width: 600px) {
+  .account-saved-grid,
+  .account-look-slots,
+  .account-wear-choices {
+    grid-template-columns: 1fr;
+  }
+  .account-look-composer,
+  .account-wear-form {
+    padding: 15px;
+  }
+  .account-looks .account-section-heading {
+    flex-wrap: wrap;
+  }
+  .account-look-type {
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .account-history-navigation > div {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .account-history-navigation label {
+    flex: 1;
+  }
+  .account-looks-switch button {
+    font-size: 11px;
+    padding: 8px;
+  }
+  .account-journal-days li {
+    flex-direction: column;
+    gap: 2px;
+  }
+  .account-journal-days li span {
+    text-align: left;
+  }
+}
