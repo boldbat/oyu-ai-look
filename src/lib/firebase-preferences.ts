@@ -67,6 +67,14 @@ export async function disconnectGoogle() {
   await signOut(services().auth);
 }
 
+export async function getCloudIdToken(): Promise<string> {
+  const { auth } = services();
+  await auth.authStateReady();
+  const user = auth.currentUser;
+  if (!user) throw new Error('Sign in with Google before starting live try-on.');
+  return user.getIdToken();
+}
+
 export async function saveCloudPreferences(uid: string, value: Preferences) {
   const preferences = parseCloudPreferences(value);
   if (!preferences) throw new Error('Check your name and style preferences before saving.');
@@ -110,6 +118,8 @@ export function cloudErrorMessage(error: unknown): string {
     return 'Cloud access was denied. Sign out and connect your Google account again.';
   if (code === 'auth/network-request-failed' || code === 'unavailable')
     return 'Cloud preferences could not connect. Your local workspace is still available.';
+  if (/^auth\/[a-z-]{1,60}$/.test(code))
+    return `Google sign-in failed (${code}). Please try again or reconnect from Settings.`;
   if (error instanceof Error && !code) return error.message;
   return 'Cloud preferences are unavailable right now. Your local workspace is unchanged.';
 }

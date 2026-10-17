@@ -144,6 +144,7 @@
     </main>
     <script type="module">
       import { BrowserLiveCamera } from '/src/lib/live-camera.ts';
+      import { getCloudIdToken } from '/src/lib/firebase-preferences.ts';
       import {
         createDecartSocket,
         updateDecartReference,
@@ -151,6 +152,7 @@
         decartErrorMessage,
       } from '/src/lib/decart-api.ts';
 
+      const hosted = new URLSearchParams(location.search).get('hosted') === 'vercel';
       const run = document.getElementById('run'),
         stop = document.getElementById('stop');
       const status = document.getElementById('status'),
@@ -399,7 +401,11 @@
         try {
           if (!canvas.captureStream || !globalThis.RTCPeerConnection)
             throw new Error('Canvas capture or WebRTC is unavailable in this browser.');
-          const configured = await decartStatus(operation.signal);
+          const configured = hosted
+            ? await fetch('/api/live', { signal: operation.signal, cache: 'no-store' }).then(
+                (response) => response.json(),
+              )
+            : await decartStatus(operation.signal);
           if (done) return;
           model = configured.model;
           if (!configured.configured)
@@ -580,7 +586,12 @@
           await controller.prepare();
           if (done) return;
           providerConnectionAttempted = true;
-          const connected = await createDecartSocket(garment, 30, operation.signal);
+          const connected = await createDecartSocket(
+            garment,
+            30,
+            operation.signal,
+            hosted ? { transport: 'websocket-init', idToken: await getCloudIdToken() } : undefined,
+          );
           if (done) {
             connected.socket.close();
             return;

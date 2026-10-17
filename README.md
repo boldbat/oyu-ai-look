@@ -4,7 +4,7 @@ Oyu AI is a personal styling web app that helps people organize the clothes they
 
 Built with **React, TypeScript, Vite, Node.js, Firebase Authentication, Cloud Firestore, WebRTC, and Decart Lucy VTON**, this repository is the web MVP for the existing Oyu AI Flutter/FastAPI product. Cloud Run is the proposed Node.js deployment target; Gemini styling assistance remains future work.
 
-**Current status:** Google sign-in and Firestore-backed preference saving are implemented and connected to Firebase project **`oyu-i-look`**. Users explicitly save, preview/apply, or remove their cloud preferences in Settings. The local wardrobe, existing account adapter, and direct Decart fitting room remain independent. Cloud Run deployment has not been verified, and Gemini is not integrated.
+**Current status:** Google sign-in and Firestore-backed preference saving are implemented and connected to Firebase project **`oyu-i-look`**. Users explicitly save, preview/apply, or remove their cloud preferences in Settings. The Vercel live API also verifies Firebase Google identity and an authorized-email list before starting a paid Decart session. The local wardrobe and existing account adapter remain independent. Cloud Run deployment has not been verified, and Gemini is not integrated.
 
 ## Brief description for the submission
 
@@ -43,7 +43,7 @@ The interface supports desktop and mobile layouts, keyboard navigation, and dial
 
 **Google cloud preferences:** Settings offers a separate Google sign-in, backed by Firebase Authentication. A user can save their name, styles, theme, and locale to Firestore, load a preview, and explicitly apply it. Photos, garments, outfits, wear logs, and account tokens are never included in this cloud document. Google sign-in does not sign in to or replace the original account backend.
 
-The direct live fitting room is a separate flow that currently works without an Oyu AI account or subscription entitlement when the server has a valid Decart configuration.
+The local live fitting room works without an Oyu AI account or subscription entitlement when the server has a valid Decart configuration. The hosted Vercel demo requires an authorized Google account; this uses the same Firebase sign-in as cloud preferences.
 
 ## Architecture
 
@@ -64,27 +64,27 @@ Browser: React + TypeScript
   `-- WebRTC video exchange with Decart
 ```
 
-Vite runs the development frontend and gateway middleware. In production, `server/index.mjs` serves `dist/` and handles HTTP and WebSocket routes. The gateway carries session setup, signaling, and garment references. Camera and generated video travel over WebRTC between the browser and the provider.
+Vite runs the development frontend and gateway middleware. The standalone production server, `server/index.mjs`, serves `dist/` and handles HTTP and WebSocket routes. On Vercel, static assets and the `api/live.mjs` Node function provide the frontend and live signaling. The gateway carries session setup, signaling, and garment references. Camera and generated video travel over WebRTC between the browser and the provider.
 
 ### Google services and providers
 
-| Service                        | Responsibility                                                  | Current status                                                                                          |
-| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Firebase Authentication**    | Google identity for optional cloud preferences.                 | Implemented and enabled in `oyu-i-look`; original account authentication is separate.                   |
-| **Cloud Firestore**            | One owner-only preference document per Firebase user.           | Implemented; schema validation and ownership rules are deployed. Wardrobe cloud storage is future work. |
-| **Cloud Run**                  | Host the frontend and Node.js server, including live signaling. | Server supports configurable host/port; deployment remains unverified.                                  |
-| **Gemini**                     | Future image understanding and styling explanations.            | Planned; no Gemini client or endpoint is implemented.                                                   |
-| **Cloud Storage for Firebase** | Future private clothing and analysis images.                    | Not used by cloud preferences. Existing account uploads use the original backend.                       |
-| **Secret Manager**             | Future server-side cloud provider credentials.                  | Planned deployment configuration; development reads `.env.local`.                                       |
-| **Decart Lucy VTON**           | Live garment transformation from camera video and a reference.  | Implemented through the existing gateway and camera controller.                                         |
+| Service                        | Responsibility                                                  | Current status                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| **Firebase Authentication**    | Google identity for cloud preferences and the hosted live demo. | Implemented in `oyu-i-look`; hosted live sessions also require an authorized email. Original account authentication is separate. |
+| **Cloud Firestore**            | One owner-only preference document per Firebase user.           | Implemented; schema validation and ownership rules are deployed. Wardrobe cloud storage is future work.                          |
+| **Cloud Run**                  | Host the frontend and Node.js server, including live signaling. | Server supports configurable host/port; deployment remains unverified.                                                           |
+| **Gemini**                     | Future image understanding and styling explanations.            | Planned; no Gemini client or endpoint is implemented.                                                                            |
+| **Cloud Storage for Firebase** | Future private clothing and analysis images.                    | Not used by cloud preferences. Existing account uploads use the original backend.                                                |
+| **Secret Manager**             | Future server-side cloud provider credentials.                  | Planned deployment configuration; development reads `.env.local`.                                                                |
+| **Decart Lucy VTON**           | Live garment transformation from camera video and a reference.  | Implemented through the existing gateway and camera controller.                                                                  |
 
 The first cloud deployment can serve the entire app from a Cloud Run HTTPS URL. Firebase Authentication and Firestore do not require Firebase Hosting. Firebase Hosting is an optional later choice for static assets and ordinary HTTP rewrites; adopting it requires separately validating the live connection routing. See [Firebase's Cloud Run integration guide](https://firebase.google.com/docs/hosting/cloud-run).
 
 ### Firebase: Google sign-in
 
-`src/lib/firebase-preferences.ts` uses the Firebase JavaScript SDK and Google's popup sign-in provider. Firebase loads when Settings opens. The SDK supplies the signed-in identity to Firestore; Security Rules authorize each request against that user's UID. Google sign-out affects the cloud-preferences connection only. See [Firebase Google sign-in documentation](https://firebase.google.com/docs/auth/web/google-signin).
+`src/lib/firebase-preferences.ts` uses the Firebase JavaScript SDK and Google's popup sign-in provider. Firebase loads when Settings or the hosted Live screen needs identity. The SDK supplies the signed-in identity to Firestore; Security Rules authorize each request against that user's UID. The Vercel live function separately verifies the signed ID token and email allowlist. Google sign-out disconnects this shared Firebase identity. See [Firebase Google sign-in documentation](https://firebase.google.com/docs/auth/web/google-signin).
 
-The existing account API and live gateway are unchanged and do not use this Firebase identity. Extending Firebase authorization to paid live sessions or migrating existing accounts would require additional backend work.
+The original account API retains its separate identity system. Local live sessions retain the loopback-only ticket gateway. Hosted live authorization does not create a subscription or migrate an original account.
 
 ### Firestore: saved preferences
 
@@ -102,7 +102,7 @@ The default Firestore database is in **`asia-northeast1` (Tokyo)**, Standard edi
 
 ### Cloud Run: application runtime
 
-Cloud Run is the intended runtime for the Node.js server. A source build compiles the React app, and the service serves its assets alongside the API proxy and live gateway. The server already reads `PORT` and supports `HOST=0.0.0.0`. Future Firebase Admin SDK and Gemini calls should run behind authenticated backend routes.
+Cloud Run is a proposed runtime for the standalone Node.js server. A source build compiles the React app, and the service serves its assets alongside the API proxy and live gateway. The server already reads `PORT` and supports `HOST=0.0.0.0`. Future Gemini calls should run behind authenticated backend routes. The current hosted live implementation uses Vercel instead.
 
 Cloud Run supports WebSockets, but connections remain subject to request timeouts and session affinity is best effort. This gateway keeps tickets and the one-session gate in process memory, so scaling requires shared session coordination. The browser currently requires an explicit new Start after a connection ends. See [Cloud Run WebSocket guidance](https://docs.cloud.google.com/run/docs/triggering/websockets).
 
@@ -127,6 +127,7 @@ The current live video transformation is provided by Decart. Gemini would provid
 
 1. Open **Live fitting room**, or visit `http://127.0.0.1:5174/#live`.
 2. Choose a local wardrobe reference or upload a PNG, JPEG, or WebP image up to **4 MB**.
+   On the hosted demo, sign in with an authorized Google account before starting AI processing.
 3. Select **Enable camera** for a local preview, without starting a provider session.
 4. Select **Start live try-on** to send the reference and camera video to Decart.
 5. Wait for a returned video frame to decode before the AI view becomes available.
@@ -142,6 +143,8 @@ The screen caps sessions at **30 seconds**, requests no microphone, and does not
 | `WS /__lookluxe/decart/stream?ticket=…` | Consume the ticket and relay provider signaling and garment changes. |
 
 The gateway keeps provider credentials out of the browser, validates payloads and origins, and permits one active provider session per process. Selecting a reference or issuing a ticket alone does not start provider processing. See [live implementation and verification](docs/live-try-on.md).
+
+On Vercel, `GET /api/live` supplies status and `WS /api/live` receives the reference, duration, and Firebase ID token in the first encrypted message. Authorization and session creation happen on that same connection; they do not depend on an HTTP ticket reaching the same function instance. The discovery route above rewrites to this function. The function rejects unauthorized users before obtaining a Decart token.
 
 ## Run locally
 
@@ -202,6 +205,31 @@ The production server also defaults to port 5174. Stop the development server fi
 The account UI's enabled state is compiled into the frontend. When changing its backend configuration in production, rebuild with the intended origin **and** set the matching runtime origin. A runtime update does not rebuild the browser bundle.
 
 Firebase uses the public web configuration in `src/lib/firebase-web-config.json`; it is included in the frontend build and needs no secret environment variable. To use a different project, replace that configuration, enable Google sign-in, authorize the website domain, and deploy the rules. Gemini is not configured or called.
+
+## Deploy live try-on on Vercel
+
+The repository includes `vercel.json` and the Node HTTP/WebSocket function `api/live.mjs`. Vercel must deploy this function as well as the Vite frontend. A deployment of `dist/` alone cannot run live try-on. Enable Fluid compute; Vercel WebSockets require it. See [Vercel's WebSocket documentation](https://vercel.com/docs/functions/websockets).
+
+Set these **server-side** environment variables for the intended deployment environment, then redeploy:
+
+| Variable               | Value                                                                                                                 |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `DECART_API_KEY`       | Your private Decart provider key.                                                                                     |
+| `DECART_MODEL`         | `lucy-vton-3.6`                                                                                                       |
+| `FIREBASE_PROJECT_ID`  | `oyu-i-look`                                                                                                          |
+| `LIVE_ALLOWED_EMAILS`  | Comma-separated verified Google email addresses authorized to use the demo. An empty list disables provider sessions. |
+| `LIVE_ALLOWED_ORIGINS` | Exact HTTPS frontend origin, e.g. `https://oyu-ai-look.vercel.app`. Comma-separated if more than one.                 |
+
+Add the frontend hostname to Firebase Authentication's authorized domains and enable Google sign-in. The current production hostname is authorized. Each preview has a different hostname and needs its own Firebase domain authorization if signing in there. The function accepts its own deployment origin automatically.
+
+```sh
+vercel link
+vercel deploy --prod
+```
+
+Check `https://your-project.vercel.app/__lookluxe/decart/status` for `configured: true`, `transport: "websocket-init"`, and `requiresSignIn: true`. Open Live fitting room, sign in, choose a reference, enable the camera, and explicitly start. The 120-second function limit accommodates setup and a bounded 30-second UI session. Provider credentials stay on the server; Firebase ID tokens are sent in a WebSocket message rather than a URL.
+
+This is an authorized private demo. The per-process active-session and request limits do not provide shared quotas across function instances. Public paid multi-user access still needs shared usage accounting and allowance enforcement. The optional original account proxy is provided by the standalone Node server and is not implemented by this Vercel live function.
 
 ## Deploy the current web shell to Cloud Run
 
@@ -295,15 +323,15 @@ Multiple instances require coordinated tickets, atomic ticket consumption, and s
 
 ## Google integration acceptance and remaining work
 
-| Area                     | Verified or remaining work                                                                                                  |
-| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| Firebase Authentication  | Real Google browser sign-in verified in `oyu-i-look`; development and the current Vercel production domain are authorized.  |
-| Firestore                | Preference schema and ownership tests pass; rules deployed; browser preference saving verified against the real database.   |
-| Original features        | All original tests pass; wardrobe persistence, the original account API, and Decart gateway code remain unchanged.          |
-| Private images           | Firebase image storage is not implemented. Preferences contain no photos.                                                   |
-| Gemini                   | Future server-side integration with explicit consent, validated outputs, and failure handling.                              |
-| Cloud Run                | Deployment recipe provided; a cloud deployment and live connection check remain necessary.                                  |
-| Paid live usage controls | Per-user authorization, allowance enforcement, and shared session state remain required before public multi-user operation. |
+| Area                     | Verified or remaining work                                                                                                                                  |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Firebase Authentication  | Real Google browser sign-in verified in `oyu-i-look`; development and the current Vercel production domain are authorized.                                  |
+| Firestore                | Preference schema and ownership tests pass; rules deployed; browser preference saving verified against the real database.                                   |
+| Original features        | All original tests pass; wardrobe persistence and original account API behavior are preserved. The live gateway also supports authenticated Vercel sockets. |
+| Private images           | Firebase image storage is not implemented. Preferences contain no photos.                                                                                   |
+| Gemini                   | Future server-side integration with explicit consent, validated outputs, and failure handling.                                                              |
+| Cloud Run                | Deployment recipe provided; a cloud deployment and live connection check remain necessary.                                                                  |
+| Paid live usage controls | Per-user authorization, allowance enforcement, and shared session state remain required before public multi-user operation.                                 |
 
 ### Firebase tests and rule deployment
 
@@ -325,7 +353,7 @@ See [Firebase setup](docs/firebase.md) for details. Keep sample fixtures visibly
 
 ## Verification and known limits
 
-The current checks pass **129 application tests**, plus **15 Firestore Security Rules tests** in the official emulator. The application suite includes all 126 original tests. Type checking and the production build pass. Real Google sign-in and a Firestore preference save were also verified in the browser; see the [verification record](docs/verification.md).
+The current checks pass **155 application tests**, including the original wardrobe/account/camera checks, hosted transport checks, and signed Firebase token validation, plus **15 Firestore Security Rules tests** in the official emulator. Type checking and the production build pass. Real Google sign-in, a Firestore preference save, and actual Decart video through the deployed Vercel function were verified in the browser; see the [verification record](docs/verification.md).
 
 Recorded browser checks include actual Decart video at **1280 × 720** from a synthetic canvas mannequin, an acknowledged garment change, and camera/peer/socket/video-element cleanup. No physical camera or microphone was used for those provider checks. Appearance on a real wearer, physical fit, and exact garment fidelity remain separate manual acceptance checks.
 
@@ -367,6 +395,8 @@ server/
   index.mjs                Production server and gateway entrypoint
   decart-bridge.mjs        Direct Decart session and signaling gateway
   live-bridge.mjs          Original API proxy and legacy live bridge
+  live-auth.mjs            Hosted Firebase token and email authorization
+api/live.mjs               Vercel Node HTTP/WebSocket entrypoint
 tests/                     Client, state, protocol, and gateway tests
   fixtures/                Synthetic API and browser verification tools
 docs/                      Design, backend, transport, and verification notes

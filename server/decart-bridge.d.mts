@@ -5,6 +5,8 @@ export function createDecartBridge(options: {
   model?: string;
   allowedOrigins?: string[];
   allowRemote?: boolean;
+  directSocket?: boolean;
+  authorizeSession?: (idToken: string) => Promise<boolean>;
   tokenEndpoint?: string;
   streamEndpoint?: string;
 }): {

@@ -49,6 +49,69 @@ afterEach(() => {
 });
 
 describe('direct Decart status and error boundary', () => {
+  it('recognizes the authenticated hosted transport without exposing arbitrary status fields', async () => {
+    fetcher.mockResolvedValueOnce(
+      json({
+        configured: true,
+        model: 'lucy-vton-3.6',
+        maxDurationSeconds: 60,
+        transport: 'websocket-init',
+        requiresSignIn: true,
+        secret: 'ignored',
+      }),
+    );
+    expect(await decartStatus()).toEqual({
+      configured: true,
+      model: 'lucy-vton-3.6',
+      maxDurationSeconds: 60,
+      transport: 'websocket-init',
+      requiresSignIn: true,
+    });
+  });
+
+  it('initializes a hosted session on its own socket without HTTP tickets or tokens in URLs', async () => {
+    vi.stubGlobal('window', { location: new URL('https://app.example.test/#live') });
+    const idToken = 'fixture-firebase-google-id-token';
+    const result = await createDecartSocket(png(), 30, undefined, {
+      transport: 'websocket-init',
+      idToken,
+    });
+    expect(fetcher).not.toHaveBeenCalled();
+    const socket = result.socket as unknown as FakeSocket;
+    expect(socket.url).toBe('wss://app.example.test/api/live');
+    expect(socket.url).not.toContain(idToken);
+    expect(socket.send).not.toHaveBeenCalled();
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+    expect(JSON.parse(socket.send.mock.calls[0][0])).toMatchObject({
+      type: 'init',
+      idToken,
+      durationSeconds: 30,
+      mimeType: 'image/png',
+    });
+    expect(result.maxDurationSeconds).toBe(30);
+  });
+
+  it('does not initialize a hosted provider session after cancellation', async () => {
+    const abort = new AbortController();
+    const result = await createDecartSocket(png(), 30, abort.signal, {
+      transport: 'websocket-init',
+      idToken: 'fixture-firebase-google-id-token',
+    });
+    const socket = result.socket as unknown as FakeSocket;
+    abort.abort();
+    socket.readyState = 1;
+    socket.dispatchEvent(new Event('open'));
+    expect(socket.send).not.toHaveBeenCalled();
+  });
+
+  it('requires a Google identity token before opening a hosted socket', async () => {
+    await expect(
+      createDecartSocket(png(), 30, undefined, { transport: 'websocket-init', idToken: '' }),
+    ).rejects.toMatchObject({ code: 'live_sign_in_required' });
+    expect(FakeSocket.instances).toHaveLength(0);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
   it('reads actual configuration without account credentials or storing extra server fields', async () => {
     fetcher.mockResolvedValue(
       json({

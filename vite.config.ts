@@ -34,6 +34,19 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
-    server: { port: 5174, strictPort: true },
+    server: {
+      port: 5174,
+      strictPort: true,
+      // Development-only path for the synthetic hosted gateway acceptance check.
+      // The normal local Live screen continues to use its local ticket bridge.
+      proxy: {
+        '/api/live': {
+          target: 'https://oyu-ai-look.vercel.app',
+          changeOrigin: true,
+          ws: true,
+          rewriteWsOrigin: true,
+        },
+      },
+    },
   };
 });

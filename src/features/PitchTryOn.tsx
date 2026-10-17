@@ -23,6 +23,7 @@ import {
 } from '../lib/decart-api';
 import { BrowserLiveCamera, type LiveCameraState } from '../lib/live-camera';
 import { useApp } from '../lib/store';
+import type { CloudUser } from '../lib/firebase-preferences';
 import './pitch.css';
 
 const DURATION = 30;
@@ -116,6 +117,9 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
   const [state, setState] = useState<LiveCameraState>(initialState);
   const [view, setView] = useState<'original' | 'ai'>('ai');
   const [configured, setConfigured] = useState<boolean | null>(null);
+  const [requiresSignIn, setRequiresSignIn] = useState(false);
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
+  const [signingIn, setSigningIn] = useState(false);
   const [statusError, setStatusError] = useState('');
   const [statusVersion, setStatusVersion] = useState(0);
   const [starting, setStarting] = useState(false);
@@ -244,7 +248,10 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
     setStatusError('');
     void decartStatus(abort.signal)
       .then((result) => {
-        if (!abort.signal.aborted) setConfigured(result.configured);
+        if (!abort.signal.aborted) {
+          setConfigured(result.configured);
+          setRequiresSignIn(result.requiresSignIn === true);
+        }
       })
       .catch((cause) => {
         if (!abort.signal.aborted) {
@@ -254,6 +261,30 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
       });
     return () => abort.abort();
   }, [statusVersion]);
+  useEffect(() => {
+    if (!requiresSignIn) return;
+    let active = true;
+    let unsubscribe: (() => void) | undefined;
+    void import('../lib/firebase-preferences')
+      .then((sdk) => {
+        if (!active) return;
+        unsubscribe = sdk.observeCloudUser(
+          (user) => {
+            if (active) setCloudUser(user);
+          },
+          (cause) => {
+            if (active) setError(sdk.cloudErrorMessage(cause));
+          },
+        );
+      })
+      .catch(() => {
+        if (active) setError('Google sign-in could not load. Reload and try again.');
+      });
+    return () => {
+      active = false;
+      unsubscribe?.();
+    };
+  }, [requiresSignIn]);
   useEffect(
     () => () => {
       if (uploadUrl.current) URL.revokeObjectURL(uploadUrl.current);
@@ -286,7 +317,15 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
     }
   }
   async function start() {
-    if (startLock.current || active || !reference || !configured || !canOpenCamera()) return;
+    if (
+      startLock.current ||
+      active ||
+      !reference ||
+      !configured ||
+      (requiresSignIn && !cloudUser) ||
+      !canOpenCamera()
+    )
+      return;
     const controller = camera.current!;
     const chosen = reference;
     const generation = ++epoch.current;
@@ -309,11 +348,20 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
       ?.closest('.pitch-camera')
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     try {
+      const idToken = requiresSignIn
+        ? await (await import('../lib/firebase-preferences')).getCloudIdToken()
+        : undefined;
+      if (!current()) return;
       if (controller.state.phase !== 'preview') await controller.prepare();
       if (!current()) return;
       const image = await referenceBlob(chosen, abort.signal);
       if (!current()) return;
-      const result = await createDecartSocket(image, DURATION, abort.signal);
+      const result = await createDecartSocket(
+        image,
+        DURATION,
+        abort.signal,
+        idToken ? { transport: 'websocket-init', idToken } : undefined,
+      );
       if (!current()) {
         result.socket.close();
         return;
@@ -336,6 +384,23 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
         startLock.current = false;
         if (mounted.current) setStarting(false);
       }
+    }
+  }
+  async function signInForLive() {
+    if (signingIn) return;
+    setSigningIn(true);
+    setError('');
+    try {
+      const sdk = await import('../lib/firebase-preferences');
+      try {
+        await sdk.connectGoogle();
+      } catch (cause) {
+        if (mounted.current) setError(sdk.cloudErrorMessage(cause));
+      }
+    } catch {
+      if (mounted.current) setError('Google sign-in could not load. Reload and try again.');
+    } finally {
+      if (mounted.current) setSigningIn(false);
     }
   }
   async function switchCamera() {
@@ -701,12 +766,27 @@ export function PitchTryOn({ covered = false }: { covered?: boolean }) {
                     'Choose a piece or upload a garment photo to begin.'
                   )}
                 </p>
+                {requiresSignIn && !cloudUser && (
+                  <button
+                    className="button secondary full-width"
+                    onClick={() => void signInForLive()}
+                    disabled={signingIn}
+                  >
+                    {signingIn ? 'Opening Google…' : 'Sign in with Google for live try-on'}
+                  </button>
+                )}
+                {requiresSignIn && cloudUser && (
+                  <p className="pitch-service-status">
+                    Signed in as {cloudUser.email || cloudUser.displayName}
+                  </p>
+                )}
                 <button
                   className="button full-width pitch-start"
                   onClick={() => void start()}
                   disabled={
                     !reference ||
                     !configured ||
+                    (requiresSignIn && !cloudUser) ||
                     starting ||
                     state.phase === 'requesting-camera' ||
                     covered ||

@@ -10,7 +10,7 @@ Oyu AI uses Firebase Authentication for Google sign-in and Cloud Firestore for e
 4. On this or another device, choose **Load saved preferences**, review the preview, and select **Apply saved preferences**.
 5. **Remove cloud copy** deletes only the saved preference document after confirmation. **Sign out** disconnects Google from this cloud feature.
 
-Opening Settings initializes Firebase. No Firebase SDK is needed for the initial wardrobe screen or live fitting room. Failed cloud operations show an error within the card and do not replace local state. A cloud load does not automatically overwrite preferences, and responses from an earlier Google session are discarded.
+Opening Settings initializes Firebase. The hosted Live screen also loads Firebase to authorize paid demo sessions; the local loopback live flow does not require it. No Firebase SDK is needed for the initial wardrobe screen. Failed cloud operations show an error within the card and do not replace local state. A cloud load does not automatically overwrite preferences, and responses from an earlier Google session are discarded.
 
 Garments, uploaded images, saved looks, wear records, analysis fixtures, camera media, existing account tokens, and Decart credentials are excluded from the preference document. There is no automatic wardrobe migration or background synchronization. Signing out does not reset this device's workspace.
 
@@ -92,4 +92,6 @@ Use the Google account that owns `oyu-i-look`. Review and test rules before depl
 
 Firebase preferences work from a static frontend on an authorized domain. The existing live fitting room and connected account proxy still require the Node.js gateway and cannot run from `dist/` alone. The Firebase addition does not replace or reroute either gateway.
 
-For the complete current app, the README describes a Cloud Run deployment of the Node server. For a static frontend host, the live gateway needs a separately designed and tested deployment/routing arrangement. No Cloud Run service, Firebase Hosting release, image storage bucket, or Gemini integration was created by this change.
+On Vercel, `api/live.mjs` provides the live gateway alongside the static frontend. `server/live-auth.mjs` verifies Firebase ID tokens using Google's public signing keys and the JOSE library: RS256 signature, key ID, project audience and issuer, expiration, issued/authentication times, subject, verified email, Google provider, and the configured email allowlist. No service account key is required. A token goes in the first encrypted socket message, never the socket URL. Failed authorization cannot start a Decart session. This flow does not read or write Firestore.
+
+The README describes Vercel configuration and a separate, unverified Cloud Run recipe for the standalone server. No Cloud Run service, Firebase Hosting release, image storage bucket, or Gemini integration has been created.

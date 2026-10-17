@@ -1,5 +1,17 @@
 # Verification record
 
+## Hosted live repair — 18 October 2026
+
+- The deployed frontend originally returned **404** for `/__lookluxe/decart/status`: the static deployment had no live gateway. Added the Vercel Node HTTP/WebSocket function and status rewrite, retaining the local ticket transport.
+- The production URL `https://oyu-ai-look.vercel.app` now returns **HTTP 200**, `configured: true`, `transport: "websocket-init"`, and `requiresSignIn: true`. Preview checks also opened a real hosted WebSocket and confirmed invalid initialization is rejected with code `decart_invalid_request` and close code 1008.
+- Hosted session initialization verifies a Firebase Google ID token and the configured verified-email allowlist before contacting Decart. Credentials are server-only, and the ID token is absent from socket URLs. Tests cover signed RSA tokens, forged signatures, issuer/audience, expiration, authentication time, subject limits, verified Google identity, denied access without provider calls, and cancellation during authorization.
+- An initial preview exposed a CommonJS/ES-module incompatibility in Firebase Admin's transitive dependency on Vercel. The final function uses JOSE and Google's public Secure Token keys for signature/claim validation, avoiding that dependency. The corrected preview and production function passed runtime checks.
+- `npm test`: **155 application tests passed across ten files**, including the original 126. The 15 emulator-only tests are skipped by this command. `npm run build` passed TypeScript and production bundling; `npm audit --omit=dev` reported zero vulnerabilities.
+- `npm run test:firebase`: **15 Security Rules tests passed** against the isolated `demo-oyu-ai` emulator. No rules changes were needed.
+- Comet ran `tests/fixtures/decart-smoke.html?hosted=vercel` through the development-only same-origin proxy to the **production Vercel function**, using the signed-in Firebase identity. The actual Decart stream decoded at **1280×720**, first live frame **6,468 ms**, **43 frame callbacks**, **45 decoded inbound frames**, and **183,701 inbound bytes**. The navy-to-beige garment update received `applying` and `applied` at **8,861 ms**. The test stopped at **9,866 ms** and completed at **9,875 ms**.
+- The hosted synthetic test passed cleanup: both video tracks ended and disabled, peers closed, videos detached, and socket closed or closing. It requested **no physical camera or microphone** and used only the drawn mannequin and bundled public garments. This confirms the deployed signaling/video path; real-wearer appearance remains a manual check.
+- The deployed Live screen also completed real Google sign-in and displayed the authorized account with **Start live try-on** enabled. The screen remained **Camera off**; no physical capture was started during this UI check.
+
 ## Firebase preferences — 18 October 2026
 
 - `npm test`: **129 application tests passed across nine files**, including all 126 original tests. The 15 emulator-only tests are skipped by this command when the emulator is absent.

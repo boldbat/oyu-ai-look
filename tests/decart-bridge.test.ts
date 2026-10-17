@@ -21,6 +21,8 @@ const offer = {
 type Message = Record<string, unknown>;
 type CapturedRequest = { url: string; headers: IncomingMessage['headers']; body: Message };
 type HarnessOptions = {
+  directSocket?: boolean;
+  authorizeSession?: (idToken: string) => Promise<boolean>;
   apiKey?: string;
   allowedOrigins?: string[];
   tokenStatus?: number;
@@ -81,6 +83,8 @@ async function harness(options: HarnessOptions = {}) {
   });
   const providerOrigin = await listen(tokenServer);
   const bridge = createDecartBridge({
+    directSocket: options.directSocket,
+    authorizeSession: options.authorizeSession,
     apiKey: options.apiKey ?? permanentKey,
     allowedOrigins: options.allowedOrigins,
     tokenEndpoint: `${providerOrigin}/v1/client/tokens`,
@@ -149,6 +153,15 @@ async function harness(options: HarnessOptions = {}) {
       socket.once('error', reject);
     });
   }
+  function hostedClient(
+    body: unknown = { type: 'init', ...garment, idToken: 'fixture-firebase-google-id-token' },
+  ) {
+    const socket = new WebSocket(`${origin.replace('http:', 'ws:')}/api/live`, { origin });
+    const received = messages(socket);
+    clients.add(socket);
+    socket.once('open', () => socket.send(JSON.stringify(body)));
+    return { socket, received };
+  }
   async function connected(ready = true) {
     const issued = await ticket();
     const connection = once(upstream, 'connection');
@@ -163,7 +176,20 @@ async function harness(options: HarnessOptions = {}) {
     }
     return { browser, provider, received, ticket: issued.ticket };
   }
-  return { origin, bridge, requests, upgrades, session, ticket, client, rejected, connected };
+  return {
+    origin,
+    bridge,
+    requests,
+    upgrades,
+    session,
+    ticket,
+    client,
+    rejected,
+    connected,
+    hostedClient,
+    upstream,
+    providerMessages,
+  };
 }
 
 afterEach(async () => {
@@ -417,5 +443,73 @@ describe('direct Decart pitch bridge', () => {
     await new Promise<void>((resolve) => setImmediate(resolve));
     expect(app.upgrades).toHaveLength(0);
     expect((await app.session()).status).toBe(201);
+  });
+});
+
+describe('hosted live transport', () => {
+  it('advertises authenticated socket initialization without calling the provider', async () => {
+    const app = await harness({ directSocket: true, authorizeSession: async () => true });
+    const response = await fetch(`${app.origin}/api/live`);
+    expect(await response.json()).toMatchObject({
+      configured: true,
+      transport: 'websocket-init',
+      requiresSignIn: true,
+    });
+    expect(app.requests).toHaveLength(0);
+  });
+
+  it('starts with a reference on the accepted socket instead of instance-local HTTP tickets', async () => {
+    const authorizeSession = vi.fn().mockResolvedValue(true);
+    const app = await harness({ directSocket: true, authorizeSession });
+    const connection = once(app.upstream, 'connection');
+    const browser = app.hostedClient();
+    const [provider] = (await connection) as [WebSocket];
+    await expectMessage(app.providerMessages.get(provider)!, {
+      type: 'set_image',
+      image_data: garment.image,
+    });
+    expect(authorizeSession).toHaveBeenCalledWith('fixture-firebase-google-id-token');
+    provider.send(JSON.stringify({ type: 'set_image_ack', success: true }));
+    await expectMessage(browser.received, { type: 'ready' });
+    browser.socket.send(JSON.stringify(offer));
+    await expectMessage(app.providerMessages.get(provider)!, offer);
+    expect(app.requests).toHaveLength(1);
+    expect(app.requests[0].body.constraints).toEqual({ realtime: { maxSessionDuration: 30 } });
+    expect(JSON.stringify(browser.received)).not.toMatch(
+      /fixture-permanent|fixture-ephemeral|firebase-google-id-token/,
+    );
+  });
+
+  it('rejects an unauthorized user before requesting a provider token', async () => {
+    const app = await harness({ directSocket: true, authorizeSession: async () => false });
+    const browser = app.hostedClient();
+    await expectMessage(browser.received, { type: 'error', code: 'live_access_denied' });
+    expect(app.requests).toHaveLength(0);
+  });
+
+  it('rejects invalid initialization before verifying identity or billing the provider', async () => {
+    const authorizeSession = vi.fn().mockResolvedValue(true);
+    const app = await harness({ directSocket: true, authorizeSession });
+    const browser = app.hostedClient({ type: 'init', ...garment, idToken: 'short' });
+    await expectMessage(browser.received, { type: 'error', code: 'decart_invalid_request' });
+    expect(authorizeSession).not.toHaveBeenCalled();
+    expect(app.requests).toHaveLength(0);
+  });
+
+  it('does not start a paid session after the browser closes during authorization', async () => {
+    let release!: (allowed: boolean) => void;
+    const pending = new Promise<boolean>((resolve) => {
+      release = resolve;
+    });
+    const authorizeSession = vi.fn(() => pending);
+    const app = await harness({ directSocket: true, authorizeSession });
+    const browser = app.hostedClient();
+    await vi.waitFor(() => expect(authorizeSession).toHaveBeenCalledTimes(1));
+    const closed = once(browser.socket, 'close');
+    browser.socket.close();
+    await closed;
+    release(true);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(app.requests).toHaveLength(0);
   });
 });

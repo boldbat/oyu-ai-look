@@ -37,6 +37,8 @@ export function createDecartBridge({
   model = 'lucy-vton-3.6',
   allowedOrigins = [],
   allowRemote = false,
+  directSocket = false,
+  authorizeSession,
   tokenEndpoint = 'https://api.decart.ai/v1/client/tokens',
   streamEndpoint = 'wss://api3.decart.ai/v1/stream',
 } = {}) {
@@ -81,13 +83,31 @@ export function createDecartBridge({
     } catch {
       return false;
     }
-    if (!url.pathname.startsWith('/__lookluxe/decart/')) return false;
+    if (
+      !url.pathname.startsWith('/__lookluxe/decart/') &&
+      !(directSocket && url.pathname === '/api/live')
+    )
+      return false;
     if (!allowed(req, req.method !== 'GET')) {
       fail(res, 403, 'decart_origin_denied');
       return true;
     }
-    if (url.pathname === '/__lookluxe/decart/status' && req.method === 'GET') {
-      reply(res, 200, { configured: !!apiKey, model, maxDurationSeconds: 60 });
+    if (
+      ['/__lookluxe/decart/status', ...(directSocket ? ['/api/live'] : [])].includes(
+        url.pathname,
+      ) &&
+      req.method === 'GET'
+    ) {
+      reply(res, 200, {
+        configured: !!apiKey && (!directSocket || typeof authorizeSession === 'function'),
+        model,
+        maxDurationSeconds: 60,
+        ...(directSocket ? { transport: 'websocket-init', requiresSignIn: true } : {}),
+      });
+      return true;
+    }
+    if (directSocket) {
+      fail(res, 405, 'decart_invalid_request');
       return true;
     }
     if (url.pathname !== '/__lookluxe/decart/sessions' || req.method !== 'POST') {
@@ -160,11 +180,80 @@ export function createDecartBridge({
     } catch {
       return false;
     }
-    if (url.pathname !== '/__lookluxe/decart/stream') return false;
+    if (url.pathname !== (directSocket ? '/api/live' : '/__lookluxe/decart/stream')) return false;
     const deny = (status) =>
       socket.end(`HTTP/1.1 ${status}\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
     if (!allowed(req)) {
       deny('403 Forbidden');
+      return true;
+    }
+    if (directSocket) {
+      if (!apiKey || typeof authorizeSession !== 'function') {
+        deny('503 Service Unavailable');
+        return true;
+      }
+      while (attempts.length && attempts[0] < Date.now() - 60000) attempts.shift();
+      if (active.size || attempts.length >= 6) {
+        deny('429 Too Many Requests');
+        return true;
+      }
+      attempts.push(Date.now());
+      wss.handleUpgrade(req, socket, head, (downstream) => {
+        const reject = (code) => {
+          if (downstream.readyState === WebSocket.OPEN) {
+            downstream.send(JSON.stringify({ type: 'error', code }));
+            downstream.close(1008, 'Session rejected');
+          }
+        };
+        const timeout = setTimeout(() => reject('live_sign_in_required'), 15000);
+        timeout.unref();
+        downstream.on('error', () => undefined);
+        downstream.once('close', () => clearTimeout(timeout));
+        downstream.once('message', async (raw, binary) => {
+          let value;
+          try {
+            if (binary) throw new Error();
+            value = JSON.parse(raw.toString());
+            if (
+              !exact(value, ['type', 'image', 'mimeType', 'durationSeconds', 'idToken']) ||
+              value.type !== 'init' ||
+              ![30, 60].includes(value.durationSeconds) ||
+              !imageValid(value.image, value.mimeType) ||
+              typeof value.idToken !== 'string' ||
+              value.idToken.length < 20 ||
+              value.idToken.length > 10000
+            )
+              throw new Error();
+          } catch {
+            clearTimeout(timeout);
+            reject('decart_invalid_request');
+            return;
+          }
+          let authorized = false;
+          try {
+            authorized = await authorizeSession(value.idToken);
+          } catch {
+            /* No provider or identity diagnostics leave the server. */
+          }
+          value.idToken = '';
+          clearTimeout(timeout);
+          if (downstream.readyState !== WebSocket.OPEN) return;
+          if (!authorized) {
+            reject('live_access_denied');
+            return;
+          }
+          if (active.size) {
+            reject('decart_session_active');
+            return;
+          }
+          void connect(downstream, {
+            id: randomUUID(),
+            image: value.image,
+            origin: req.headers.origin,
+            seconds: value.durationSeconds,
+          });
+        });
+      });
       return true;
     }
     const key = url.searchParams.get('ticket');

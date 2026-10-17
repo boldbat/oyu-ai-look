@@ -1,5 +1,5 @@
 /** Direct Decart pitch client. Only the same-origin server knows the provider key.
- * Images are transient; no account credentials or browser storage are involved.
+ * Images are transient. Hosted sessions use a Firebase ID token; provider keys never reach the client.
  */
 export const DECART_MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 export type DecartImageMime = 'image/jpeg' | 'image/png' | 'image/webp';
@@ -8,6 +8,8 @@ export interface DecartStatus {
   configured: boolean;
   model: string;
   maxDurationSeconds: 60;
+  transport?: 'websocket-init';
+  requiresSignIn?: true;
 }
 export interface DecartConnection {
   socket: WebSocket;
@@ -36,6 +38,9 @@ const messages: Record<string, string> = {
   decart_network_error: 'Could not reach the live service. Check your connection and try again.',
   decart_timeout: 'The live service took too long to respond. Please try again.',
   decart_busy: 'The live service is currently busy. Please try again shortly.',
+  live_sign_in_required: 'Sign in with Google before starting live try-on.',
+  live_access_denied:
+    'This Google account is not enabled for the live demo. Use your authorized account.',
   rate_limited: 'Too many live requests. Please wait before trying again.',
   provider_unavailable: 'The live provider is temporarily unavailable. Please try again later.',
   live_tryon_disabled: 'Live try-on is not currently enabled on this server.',
@@ -88,7 +93,7 @@ function pageUrl(): URL {
   return url;
 }
 
-/** Fixed local routes cannot redirect an image or accidentally inherit account auth. */
+/** Fixed same-origin routes cannot redirect an image or inherit the original account API's auth. */
 async function request(
   path: '/__lookluxe/decart/status' | '/__lookluxe/decart/sessions',
   body: unknown,
@@ -199,46 +204,73 @@ export async function decartStatus(signal?: AbortSignal): Promise<DecartStatus> 
   ) {
     throw new DecartApiError('decart_invalid_response');
   }
-  return { configured: result.configured, model: result.model, maxDurationSeconds: 60 };
+  if (
+    result.transport !== undefined &&
+    (result.transport !== 'websocket-init' || result.requiresSignIn !== true)
+  )
+    throw new DecartApiError('decart_invalid_response');
+  return {
+    configured: result.configured,
+    model: result.model,
+    maxDurationSeconds: 60,
+    ...(result.transport === 'websocket-init'
+      ? { transport: 'websocket-init', requiresSignIn: true }
+      : {}),
+  };
 }
 
 /** Call only after explicit camera/image consent. No automatic retry or reconnect.
- * Creating a ticket is local; the server starts Decart only when this socket opens.
+ * The local gateway uses a ticket; hosted sessions initialize and authorize on the socket.
  * Attach BrowserLiveCamera immediately after this promise resolves.
  */
 export async function createDecartSocket(
   image: Blob,
   durationSeconds: DecartDuration,
   signal?: AbortSignal,
+  hosted?: { transport: 'websocket-init'; idToken: string },
 ): Promise<DecartConnection> {
   const origin = pageUrl();
   cancelled(signal);
   if (typeof WebSocket === 'undefined') throw new DecartApiError('decart_unavailable');
   if (![30, 60].includes(durationSeconds)) throw new DecartApiError('decart_invalid_request');
   const payload = await imagePayload(image, signal);
-  const result = await request(
-    '/__lookluxe/decart/sessions',
-    { ...payload, durationSeconds },
-    signal,
-  );
-  cancelled(signal);
-  if (
-    !object(result) ||
-    typeof result.id !== 'string' ||
-    !result.id.length ||
-    result.id.length > 128 ||
-    typeof result.ticket !== 'string' ||
-    !/^[A-Za-z0-9_-]{16,256}$/.test(result.ticket) ||
-    result.expiresIn !== 15 ||
-    (result.maxDurationSeconds !== 30 && result.maxDurationSeconds !== 60) ||
-    result.maxDurationSeconds > durationSeconds
-  ) {
-    throw new DecartApiError('decart_invalid_response');
+  let maxDurationSeconds: DecartDuration = durationSeconds;
+  let url: URL;
+  if (hosted) {
+    if (
+      hosted.transport !== 'websocket-init' ||
+      typeof hosted.idToken !== 'string' ||
+      hosted.idToken.length < 20 ||
+      hosted.idToken.length > 10000
+    )
+      throw new DecartApiError('live_sign_in_required');
+    url = new URL('/api/live', origin);
+  } else {
+    const result = await request(
+      '/__lookluxe/decart/sessions',
+      { ...payload, durationSeconds },
+      signal,
+    );
+    cancelled(signal);
+    if (
+      !object(result) ||
+      typeof result.id !== 'string' ||
+      !result.id.length ||
+      result.id.length > 128 ||
+      typeof result.ticket !== 'string' ||
+      !/^[A-Za-z0-9_-]{16,256}$/.test(result.ticket) ||
+      result.expiresIn !== 15 ||
+      (result.maxDurationSeconds !== 30 && result.maxDurationSeconds !== 60) ||
+      result.maxDurationSeconds > durationSeconds
+    ) {
+      throw new DecartApiError('decart_invalid_response');
+    }
+    const ticket = result as unknown as DecartTicket;
+    url = new URL('/__lookluxe/decart/stream', origin);
+    url.searchParams.set('ticket', ticket.ticket);
+    maxDurationSeconds = ticket.maxDurationSeconds;
   }
-  const ticket = result as unknown as DecartTicket;
-  const url = new URL('/__lookluxe/decart/stream', origin);
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-  url.searchParams.set('ticket', ticket.ticket);
   let socket: WebSocket;
   try {
     socket = new WebSocket(url.href);
@@ -246,6 +278,22 @@ export async function createDecartSocket(
     throw new DecartApiError('decart_unavailable');
   }
   ownedSockets.add(socket);
+  if (hosted) {
+    socket.addEventListener(
+      'open',
+      () => {
+        if (signal?.aborted || socket.readyState !== 1) return;
+        try {
+          socket.send(
+            JSON.stringify({ type: 'init', ...payload, durationSeconds, idToken: hosted.idToken }),
+          );
+        } catch {
+          socket.close();
+        }
+      },
+      { once: true },
+    );
+  }
   const close = () => {
     try {
       socket.close(1000, 'Preview cancelled');
@@ -262,7 +310,7 @@ export async function createDecartSocket(
     },
     { once: true },
   );
-  return { socket, maxDurationSeconds: ticket.maxDurationSeconds };
+  return { socket, maxDurationSeconds };
 }
 
 /** Sends one explicit garment change. Completion is signaled by applying/applied
