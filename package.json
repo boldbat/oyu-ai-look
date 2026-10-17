@@ -8,12 +8,18 @@
     "build": "tsc -b && vite build",
     "preview": "npm run start",
     "test": "vitest run",
+    "test:firebase": "firebase emulators:exec --only firestore --project demo-oyu-ai \"vitest run tests/firebase-rules.test.ts\"",
+    "firebase:rules": "firebase deploy --only firestore:rules --project oyu-i-look",
     "typecheck": "tsc -b --pretty false",
     "format": "prettier --write src tests docs *.json *.ts index.html README.md",
     "start": "node --env-file-if-exists=.env.local server/index.mjs"
   },
+  "overrides": {
+    "@grpc/grpc-js": "^1.14.6"
+  },
   "dependencies": {
     "@vitejs/plugin-react": "^6.1.2",
+    "firebase": "^13.0.0",
     "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -22,10 +28,12 @@
     "ws": "^8.22.0"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^6.0.0",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.18.2",
+    "firebase-tools": "^15.34.0",
     "prettier": "^3.9.10",
     "vitest": "^5.0.4"
   }

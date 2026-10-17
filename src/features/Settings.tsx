@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ArrowDownToLine,
   ArrowUpRight,
@@ -15,10 +15,12 @@ import {
 } from 'lucide-react';
 import { useApp } from '../lib/store';
 import { Dialog } from '../components/Dialog';
+import { CloudPreferences } from './CloudPreferences';
 export function Settings() {
   const { data, updatePreferences, resetWorkspace, notify, openAccount } = useApp();
   const [name, setName] = useState(data.preferences.name);
   const [resetOpen, setResetOpen] = useState(false);
+  useEffect(() => setName(data.preferences.name), [data.preferences.name]);
   const exportData = () => {
     const blob = new Blob(
       [
@@ -49,6 +51,7 @@ export function Settings() {
       </div>
       <div className="settings-grid">
         <div className="settings-main">
+          <CloudPreferences />
           <section className="card settings-card">
             <div className="section-heading">
               <div>

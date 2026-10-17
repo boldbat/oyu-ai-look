@@ -2,21 +2,15 @@
 
 Oyu AI is a personal styling web app that helps people organize the clothes they own, discover outfit combinations, keep a wear journal, and preview garments in a live AI fitting room. It brings wardrobe management, outfit planning, and real-time visual experimentation into one responsive workspace.
 
-Built with **React, TypeScript, Vite, Node.js, WebRTC, and Decart Lucy VTON**, this repository is the web MVP for the existing Oyu AI Flutter/FastAPI product. Its proposed Google Cloud architecture brings together **Firebase Authentication, Cloud Firestore, Cloud Run, and Gemini**.
+Built with **React, TypeScript, Vite, Node.js, Firebase Authentication, Cloud Firestore, WebRTC, and Decart Lucy VTON**, this repository is the web MVP for the existing Oyu AI Flutter/FastAPI product. Cloud Run is the proposed Node.js deployment target; Gemini styling assistance remains future work.
 
-**Current status:** The browser-local wardrobe workspace, existing account API adapter, and direct Decart fitting room are implemented. Firebase Authentication, Firestore persistence, and Gemini calls are planned integrations; their SDKs and service configuration are not present in this checkout. Cloud Run deployment instructions are provided below, but a cloud deployment has not been verified. Deploying this repository alone does not implement the remaining integrations.
+**Current status:** Google sign-in and Firestore-backed preference saving are implemented and connected to Firebase project **`oyu-i-look`**. Users explicitly save, preview/apply, or remove their cloud preferences in Settings. The local wardrobe, existing account adapter, and direct Decart fitting room remain independent. Cloud Run deployment has not been verified, and Gemini is not integrated.
 
 ## Brief description for the submission
 
-### Current build
+We built Oyu AI, a personal styling and virtual wardrobe app that helps users organize clothes, create saved outfits, track what they wear, and explore a live AI fitting room. We use **Firebase Authentication** for Google sign-in and **Cloud Firestore** to persist each signed-in user's display name, preferred styles, appearance, and locale. Users choose when to save or apply those preferences, and Firestore Security Rules restrict each record to its owner. This cloud feature is separate from the browser-local wardrobe and existing account backend, preserving the original workflows. Live garment transformation uses **Decart Lucy VTON and WebRTC**, with explicit start, garment switching, and stop controls. The included Node.js server is prepared for deployment to **Cloud Run**, although that deployment has not been verified. **Gemini** is planned for future garment understanding and styling explanations; it is not used by this build.
 
-We built Oyu AI, a personal styling and virtual wardrobe application that helps users make better use of the clothes they already own. Users can organize garments, create and save outfits, log what they wear, and explore a live AI fitting room. The responsive React interface includes a browser-local sample workspace and a separate connection to the existing Oyu AI account backend. Our live fitting room uses Decart Lucy VTON with WebRTC to transform camera video using a selected garment reference, with explicit session start, garment switching, and stop controls. We have designed the next deployment around Firebase for identity, Firestore for wardrobe and styling records, Cloud Run for the Node.js application and protected AI endpoints, and Gemini for multimodal garment understanding and personalized styling explanations. These Google service integrations remain to be implemented and verified.
-
-### Google Cloud version — draft for after integration
-
-The following paragraph describes the intended completed architecture in submission style. Use it as an implementation claim after the integrations and acceptance checks below are complete.
-
-> We built Oyu AI, an AI personal stylist and virtual wardrobe that helps users discover new outfits from the clothes they already own. Users can organize their wardrobe, save looks, track what they wear, receive personalized styling guidance, and preview garments in a live fitting room. We use Firebase Authentication to manage user identity and Cloud Firestore to store each user's wardrobe metadata, saved outfits, preferences, wear history, and AI analysis results. Our Node.js application runs on Cloud Run, serving the web experience and handling authenticated requests, AI orchestration, and live try-on signaling while keeping provider credentials on the server. Gemini analyzes consented garment and outfit images, extracts structured clothing attributes, and generates styling explanations grounded in the user's available wardrobe. Decart Lucy VTON provides the real-time garment transformation over WebRTC. Together, these services connect wardrobe organization, AI styling assistance, and an interactive fitting room in one application.
+The Firebase integration stores preferences only. It does not claim cloud wardrobe storage, Gemini-generated analyses, or a completed Cloud Run deployment.
 
 ## Why we built Oyu AI
 
@@ -36,17 +30,20 @@ Oyu AI starts with the user's own wardrobe. It makes clothes easier to find, tur
 | Style history     | Explore illustrative sample scores and notes, with missing dimensions represented separately from zero scores.                                                                     |
 | Live fitting room | Select a garment, enable a local camera preview, explicitly start AI try-on, change the garment during a session, switch supported cameras, and stop.                              |
 | Preferences       | Set a display name and style preferences, choose light/dark/system appearance, export sample data as JSON, or confirm a sample reset.                                              |
+| Cloud preferences | Sign in with Google and explicitly save, load/apply, or remove your owner-only Firestore preferences.                                                                              |
 | Connected account | Use the original API for authentication, entitlement, private wardrobe workflows, saved outfits, wear logging, and consented outfit-photo analysis. Requires a configured backend. |
 
 The interface supports desktop and mobile layouts, keyboard navigation, and dialog focus management. The current web interface is English; a complete Mongolian translation remains future work.
 
-### Two separate data experiences
+### Independent data experiences
 
 **Sample workspace:** Clothing, uploaded images, saved outfits, wear records, and preferences persist in this browser's local storage. Initial assets and analysis scores are presentation fixtures. Local clothing intake uses manual confirmation, and local outfit combinations use deterministic application logic. Neither flow currently calls Gemini.
 
 **Connected account:** The account panel uses the original Oyu AI `/v1` backend through the included same-origin proxy. Account tokens stay in memory, so refreshing the page signs out of the connected view. Real records remain separate from sample data; signing in does not import the sample wardrobe.
 
-The direct live fitting room is a separate flow that currently works without a Oyu AI account or subscription entitlement when the server has a valid Decart configuration.
+**Google cloud preferences:** Settings offers a separate Google sign-in, backed by Firebase Authentication. A user can save their name, styles, theme, and locale to Firestore, load a preview, and explicitly apply it. Photos, garments, outfits, wear logs, and account tokens are never included in this cloud document. Google sign-in does not sign in to or replace the original account backend.
+
+The direct live fitting room is a separate flow that currently works without an Oyu AI account or subscription entitlement when the server has a valid Decart configuration.
 
 ## Architecture
 
@@ -55,6 +52,8 @@ The direct live fitting room is a separate flow that currently works without a O
 ```text
 Browser: React + TypeScript
   |-- Local storage: sample wardrobe, outfits, preferences, wear journal
+  |-- Firebase Authentication: optional Google sign-in in Settings
+  |-- Cloud Firestore: owned preference document, saved/applied explicitly
   |-- Same-origin HTTP requests and WebSocket signaling
   |     |
   |     Node.js server / Vite development middleware
@@ -67,51 +66,39 @@ Browser: React + TypeScript
 
 Vite runs the development frontend and gateway middleware. In production, `server/index.mjs` serves `dist/` and handles HTTP and WebSocket routes. The gateway carries session setup, signaling, and garment references. Camera and generated video travel over WebRTC between the browser and the provider.
 
-### Google Cloud integration plan
+### Google services and providers
 
-| Service                        | Intended responsibility                                                                                          | Current status                                                                                    |
-| ------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| **Firebase Authentication**    | Registration/sign-in, stable user IDs, and identity tokens verified by backend endpoints.                        | Planned; the existing account panel uses the original owned-auth API.                             |
-| **Cloud Firestore**            | Per-user garment metadata, saved looks, wear logs, preferences, consent records, and AI results.                 | Planned; sample data currently uses local storage.                                                |
-| **Cloud Run**                  | Host the production frontend and Node.js server; execute protected AI requests and handle live signaling.        | Server supports configurable host/port; cloud deployment is unverified.                           |
-| **Gemini**                     | Understand consented clothing images, propose structured garment attributes, and explain outfit recommendations. | Planned; no Gemini client or endpoint is implemented here.                                        |
-| **Cloud Storage for Firebase** | Store private clothing and analysis images separately from Firestore metadata.                                   | Planned for the Google architecture; existing account uploads use the original backend's storage. |
-| **Secret Manager**             | Supply server-only provider credentials to Cloud Run.                                                            | Planned cloud configuration; local development reads `.env.local`.                                |
-| **Decart Lucy VTON**           | Generate the live garment transformation from camera video and a selected reference.                             | Implemented through the direct gateway and camera controller.                                     |
+| Service                        | Responsibility                                                  | Current status                                                                                          |
+| ------------------------------ | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Firebase Authentication**    | Google identity for optional cloud preferences.                 | Implemented and enabled in `oyu-i-look`; original account authentication is separate.                   |
+| **Cloud Firestore**            | One owner-only preference document per Firebase user.           | Implemented; schema validation and ownership rules are deployed. Wardrobe cloud storage is future work. |
+| **Cloud Run**                  | Host the frontend and Node.js server, including live signaling. | Server supports configurable host/port; deployment remains unverified.                                  |
+| **Gemini**                     | Future image understanding and styling explanations.            | Planned; no Gemini client or endpoint is implemented.                                                   |
+| **Cloud Storage for Firebase** | Future private clothing and analysis images.                    | Not used by cloud preferences. Existing account uploads use the original backend.                       |
+| **Secret Manager**             | Future server-side cloud provider credentials.                  | Planned deployment configuration; development reads `.env.local`.                                       |
+| **Decart Lucy VTON**           | Live garment transformation from camera video and a reference.  | Implemented through the existing gateway and camera controller.                                         |
 
 The first cloud deployment can serve the entire app from a Cloud Run HTTPS URL. Firebase Authentication and Firestore do not require Firebase Hosting. Firebase Hosting is an optional later choice for static assets and ordinary HTTP rewrites; adopting it requires separately validating the live connection routing. See [Firebase's Cloud Run integration guide](https://firebase.google.com/docs/hosting/cloud-run).
 
-### Firebase: user identity
+### Firebase: Google sign-in
 
-In the intended integration, the browser signs in through the Firebase client SDK and sends its ID token with protected backend requests. The Node.js service verifies that token with the Firebase Admin SDK and derives ownership from the verified user ID. See [Firebase ID token verification](https://firebase.google.com/docs/auth/admin/verify-id-tokens).
+`src/lib/firebase-preferences.ts` uses the Firebase JavaScript SDK and Google's popup sign-in provider. Firebase loads when Settings opens. The SDK supplies the signed-in identity to Firestore; Security Rules authorize each request against that user's UID. Google sign-out affects the cloud-preferences connection only. See [Firebase Google sign-in documentation](https://firebase.google.com/docs/auth/web/google-signin).
 
-That identity must be connected to wardrobe access, uploads, AI analysis, and live session creation. Sign-in alone does not protect an endpoint that never verifies a token. The existing owned-auth account panel also needs an explicit migration or account-linking design; Firebase tokens cannot simply replace the original backend's tokens.
+The existing account API and live gateway are unchanged and do not use this Firebase identity. Extending Firebase authorization to paid live sessions or migrating existing accounts would require additional backend work.
 
-### Firestore: wardrobe and styling records
+### Firestore: saved preferences
 
-A proposed document layout follows user ownership:
+The implemented document path is:
 
 ```text
-users/{uid}
-  garments/{garmentId}
-  looks/{lookId}
-  wearLogs/{wearLogId}
-  analyses/{analysisId}
-  consents/{policyId}
+users/{firebaseUid}/settings/preferences
 ```
 
-| Record     | Example fields                                                                                                |
-| ---------- | ------------------------------------------------------------------------------------------------------------- |
-| Profile    | Display name, preferred styles, theme, locale, timestamps.                                                    |
-| Garment    | Name, category, color, private image object path, availability, favorite/archive state, confirmed attributes. |
-| Saved look | Name, owned garment IDs, timestamps.                                                                          |
-| Wear log   | Calendar date and the owned garments actually worn.                                                           |
-| Analysis   | Status, source image reference, model/prompt version, observations, nullable scores, timestamp.               |
-| Consent    | Policy version, granted/revoked state, processing purpose, timestamp.                                         |
+Each document contains a schema version, a preferences map (`name`, `styles`, `theme`, `language`), and a server-generated `updatedAt` timestamp. Saving is explicit. Loading shows a preview before changing local settings. Removing the cloud copy requires confirmation and leaves local preferences intact.
 
-This is a proposed schema. Images belong in private object storage, with references in Firestore. Client access needs ownership and field-validation rules. Server writes need equivalent authorization because server client libraries bypass Firestore Security Rules. See [Firestore security guidance](https://firebase.google.com/docs/firestore/security/get-started).
+The deployed `firestore.rules` permit only the owner's document get/create/update/delete operations, validate fields and allowed values, and reject collection enumeration and all unrelated paths. The app uses [Firestore Lite](https://firebase.google.com/docs/firestore/solutions/firestore-lite) for explicit online operations, without an offline write queue or automatic wardrobe synchronization.
 
-The migration must preserve archive history, prevent foreign garment references, and make importing local records an explicit action. AI results, consent evidence, and usage allowances must not be freely writable by a client.
+The default Firestore database is in **`asia-northeast1` (Tokyo)**, Standard edition, Native mode. Only a small preference document is stored; no images or live media are sent to Firebase. The checked-in web configuration contains public client identifiers, not an administrative credential. Access is enforced by Authentication and Security Rules. See [Firebase setup and verification](docs/firebase.md) for configuration, domain setup, and tests.
 
 ### Cloud Run: application runtime
 
@@ -214,11 +201,11 @@ The production server also defaults to port 5174. Stop the development server fi
 
 The account UI's enabled state is compiled into the frontend. When changing its backend configuration in production, rebuild with the intended origin **and** set the matching runtime origin. A runtime update does not rebuild the browser bundle.
 
-There are no active Firebase or Gemini environment variables in this checkout; adding names to a cloud console has no effect until their code is implemented.
+Firebase uses the public web configuration in `src/lib/firebase-web-config.json`; it is included in the frontend build and needs no secret environment variable. To use a different project, replace that configuration, enable Google sign-in, authorize the website domain, and deploy the rules. Gemini is not configured or called.
 
 ## Deploy the current web shell to Cloud Run
 
-This recipe publishes the existing browser-local sample experience and leaves remote paid try-on disabled. It does not provision Firebase, migrate data, or add Gemini. These instructions have not been executed against a cloud project for this documentation update.
+This recipe publishes the browser-local workspace and its optional Firebase cloud-preferences feature, while leaving remote paid try-on disabled. It uses the already configured Firebase project; it does not migrate wardrobe data or add Gemini. Cloud Run deployment remains unverified.
 
 ### 1. Select the project
 
@@ -306,29 +293,46 @@ Then supply the Decart credential through Secret Manager, grant the runtime serv
 
 Multiple instances require coordinated tickets, atomic ticket consumption, and shared session limits. Session affinity and a single-instance setting do not replace those controls. See the [live deployment boundaries](docs/live-try-on.md).
 
-## Acceptance checks for the Google service submission
+## Google integration acceptance and remaining work
 
-| Integration             | Work needed                                                                                                  | Evidence before claiming completion                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
-| Firebase Authentication | Browser sign-in, token verification, authorized domains, and existing-account migration/linking.             | A real user signs in; invalid identities and cross-user access are rejected.                                  |
-| Firestore               | Per-user persistence, validation, queries/indexes, access rules, and explicit local-data import.             | Records persist across sessions/devices; ownership and forbidden-field checks pass.                           |
-| Private images          | Owned upload/download access, file validation, and deletion behavior.                                        | One account can retrieve its image; another cannot; media deletion follows the defined lifecycle.             |
-| Gemini                  | Server-side provider client, configured model, validated outputs, consent enforcement, and failure handling. | A real consented image produces a traceable provider result; missing consent and invalid results are handled. |
-| Cloud Run               | Deploy with the correct listener, environment, identity, secret access, and routing.                         | Deployed HTTPS pages, protected requests, and intended live connections work in a real browser.               |
-| Live usage controls     | Protected session creation, per-user allowance, and shared state before scaling.                             | Unauthorized/exhausted users cannot start paid sessions; concurrent instances preserve limits.                |
+| Area                     | Verified or remaining work                                                                                                  |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| Firebase Authentication  | Real Google browser sign-in verified in `oyu-i-look`; development and the current Vercel production domain are authorized.  |
+| Firestore                | Preference schema and ownership tests pass; rules deployed; browser preference saving verified against the real database.   |
+| Original features        | All original tests pass; wardrobe persistence, the original account API, and Decart gateway code remain unchanged.          |
+| Private images           | Firebase image storage is not implemented. Preferences contain no photos.                                                   |
+| Gemini                   | Future server-side integration with explicit consent, validated outputs, and failure handling.                              |
+| Cloud Run                | Deployment recipe provided; a cloud deployment and live connection check remain necessary.                                  |
+| Paid live usage controls | Per-user authorization, allowance enforcement, and shared session state remain required before public multi-user operation. |
 
-After these pass, update the implementation status and submission paragraph, and add the actual demo URL. Keep fixtures visibly labeled even after cloud integration.
+### Firebase tests and rule deployment
+
+The regular application suite needs no cloud credentials. The rules suite uses the isolated `demo-oyu-ai` emulator project and requires Java 21 or later:
+
+```sh
+npm test
+npm run test:firebase
+```
+
+To deploy a reviewed rule change to the real project, sign in to the Firebase CLI with the project owner and run:
+
+```sh
+npx firebase login
+npm run firebase:rules
+```
+
+See [Firebase setup](docs/firebase.md) for details. Keep sample fixtures visibly labeled after cloud integration.
 
 ## Verification and known limits
 
-The existing [verification record](docs/verification.md) reports **126 passing tests across eight files**, successful type checking, and a successful production build from the earlier implementation session. Those are recorded results, not a new test run for this documentation change.
+The current checks pass **129 application tests**, plus **15 Firestore Security Rules tests** in the official emulator. The application suite includes all 126 original tests. Type checking and the production build pass. Real Google sign-in and a Firestore preference save were also verified in the browser; see the [verification record](docs/verification.md).
 
 Recorded browser checks include actual Decart video at **1280 × 720** from a synthetic canvas mannequin, an acknowledged garment change, and camera/peer/socket/video-element cleanup. No physical camera or microphone was used for those provider checks. Appearance on a real wearer, physical fit, and exact garment fidelity remain separate manual acceptance checks.
 
 Current limits:
 
 - Real-account sign-in and photo processing require acceptance testing against an available original backend and test account.
-- Main-workspace cloud synchronization, Firebase identity, Firestore storage, and Gemini processing remain unimplemented.
+- Cloud persistence currently covers preferences only. Main-workspace wardrobe synchronization and Gemini processing remain future work.
 - Sample uploads are limited to **2 MB** each and browser storage capacity. Export a copy from Settings for independent safekeeping.
 - Live references support **4 MB**; the current screen uses **30-second** sessions.
 - Account tokens are held in memory; production session persistence needs an explicit session design.
@@ -369,18 +373,21 @@ docs/                      Design, backend, transport, and verification notes
 public/                    Static assets
 ```
 
-| Command             | Purpose                                   |
-| ------------------- | ----------------------------------------- |
-| `npm run dev`       | Start Vite with gateway middleware.       |
-| `npm run typecheck` | Check TypeScript project types.           |
-| `npm test`          | Run the Vitest suite.                     |
-| `npm run build`     | Type-check and build the frontend.        |
-| `npm start`         | Serve the built app and backend gateways. |
-| `npm run preview`   | Alias for the production Node.js server.  |
-| `npm run format`    | Format source, tests, and documentation.  |
+| Command                  | Purpose                                            |
+| ------------------------ | -------------------------------------------------- |
+| `npm run dev`            | Start Vite with gateway middleware.                |
+| `npm run typecheck`      | Check TypeScript project types.                    |
+| `npm run test:firebase`  | Run the isolated Firestore rules tests (Java 21+). |
+| `npm run firebase:rules` | Deploy reviewed rules to `oyu-i-look`.             |
+| `npm test`               | Run the Vitest suite.                              |
+| `npm run build`          | Type-check and build the frontend.                 |
+| `npm start`              | Serve the built app and backend gateways.          |
+| `npm run preview`        | Alias for the production Node.js server.           |
+| `npm run format`         | Format source, tests, and documentation.           |
 
 ## Further documentation
 
+- [Firebase configuration and verification](docs/firebase.md)
 - [Design system](docs/design-system.md)
 - [Source audit and feature parity boundaries](docs/source-audit.md)
 - [Existing backend integration](docs/backend-integration.md)

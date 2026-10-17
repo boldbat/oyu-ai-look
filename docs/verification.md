@@ -1,4 +1,18 @@
-# Verification — 15 October 2026
+# Verification record
+
+## Firebase preferences — 18 October 2026
+
+- `npm test`: **129 application tests passed across nine files**, including all 126 original tests. The 15 emulator-only tests are skipped by this command when the emulator is absent.
+- `npm run test:firebase`: **15 Security Rules tests passed** against the official Firestore emulator using isolated project `demo-oyu-ai`. Checks cover ownership, unauthenticated and cross-user access, collection listing, unrelated paths, malformed schemas, extra fields, timestamps, and preference value limits.
+- `npm run build`: TypeScript and the production bundle passed. Firebase is a separate dynamically imported chunk initialized when Settings opens.
+- `npm audit --omit=dev`: zero production dependency vulnerabilities after a scoped transitive gRPC override.
+- Firebase project `oyu-i-look` has the `Oyu AI Web` app, Google Authentication enabled, and a default Standard Native Firestore database in `asia-northeast1`. The tested `firestore.rules` were deployed to its `cloud.firestore` release.
+- Real browser Google sign-in succeeded. The Settings card saved preferences to the real database, loaded a preview with the saved timestamp, and applied it. Values were the existing sample preferences; no wardrobe photos or camera media were uploaded.
+- An administrative read confirmed the live document has exactly `schemaVersion`, `preferences`, and `updatedAt`. A direct unauthenticated request to the same document returned **HTTP 403**.
+- The existing workspace store/key, original account API, camera controller, Decart client/gateway, and production server were not modified. Their tests pass. No new paid Decart session or physical-camera acceptance test was performed for this change.
+- A static frontend supports Firebase preferences; live try-on and account proxying still require the Node.js gateway. No Cloud Run deployment or Gemini integration was performed.
+
+## Original implementation — 15 October 2026
 
 ## Automated
 

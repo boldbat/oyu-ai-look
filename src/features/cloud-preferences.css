@@ -1,0 +1,66 @@
+.cloud-preferences-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+}
+.cloud-preferences-disclosure {
+  color: var(--secondary);
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0 0 20px;
+}
+.cloud-preferences-account {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.cloud-preferences-account strong,
+.cloud-preferences-account small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.cloud-preferences-account small {
+  color: var(--secondary);
+  margin-top: 5px;
+}
+.cloud-preferences-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.cloud-preferences-error,
+.cloud-preferences-message {
+  font-size: 12px;
+  line-height: 1.7;
+  margin-top: 16px;
+}
+.cloud-preferences-error {
+  color: var(--danger, #ad4141);
+}
+.cloud-preferences-message {
+  color: var(--ink);
+}
+.cloud-preferences-provider {
+  display: block;
+  color: var(--secondary);
+  font-size: 10px;
+  margin-top: 18px;
+}
+.cloud-preferences-preview {
+  display: grid;
+  gap: 12px;
+  margin: 22px 0;
+}
+.cloud-preferences-preview div {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 12px;
+}
+.cloud-preferences-preview dt {
+  color: var(--secondary);
+}
+.cloud-preferences-preview dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

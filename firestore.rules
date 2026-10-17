@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function owner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    function validPreferences() {
+      let data = request.resource.data;
+      let prefs = data.preferences;
+      return data.keys().hasAll(['schemaVersion', 'preferences', 'updatedAt'])
+        && data.keys().hasOnly(['schemaVersion', 'preferences', 'updatedAt'])
+        && data.schemaVersion == 1
+        && data.updatedAt == request.time
+        && prefs is map
+        && prefs.keys().hasAll(['name', 'styles', 'theme', 'language'])
+        && prefs.keys().hasOnly(['name', 'styles', 'theme', 'language'])
+        && prefs.name is string
+        && prefs.name.size() > 0 && prefs.name.size() <= 40
+        && prefs.styles is list && prefs.styles.size() <= 3
+        && prefs.styles.hasOnly(['Minimal', 'Classic', 'Casual', 'Business', 'Street', 'Romantic', 'Sporty', 'Formal'])
+        && prefs.styles.toSet().size() == prefs.styles.size()
+        && prefs.theme in ['light', 'dark', 'system']
+        && prefs.language in ['en', 'mn'];
+    }
+
+    match /users/{uid}/settings/preferences {
+      allow get: if owner(uid);
+      allow create, update: if owner(uid) && validPreferences();
+      allow delete: if owner(uid);
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
