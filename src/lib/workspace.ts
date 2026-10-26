@@ -1,5 +1,6 @@
-import { localDate } from './demo';
-import { categoryLabels } from './types';
+import { localDate, makeDemo, SAMPLE_VERSION } from './demo';
+import { t } from './lang';
+import { categoryLabels, styleTags } from './types';
 import type { Garment, Workspace } from './types';
 
 type RecordValue = Record<string, unknown>;
@@ -30,6 +31,10 @@ function garment(value: unknown): value is Garment {
     nonempty(value.name) &&
     text(value.category) &&
     Object.hasOwn(categoryLabels, value.category) &&
+    (value.kind === undefined || (nonempty(value.kind) && value.kind.length <= 60)) &&
+    (value.audience === undefined ||
+      ['women', 'men', 'unisex'].includes(value.audience as string)) &&
+    (value.style === undefined || (styleTags as unknown[]).includes(value.style)) &&
     text(value.color) &&
     text(value.colorHex) &&
     nonempty(value.image) &&
@@ -101,6 +106,11 @@ export function parseWorkspace(raw: string): Workspace | null {
       !unique(data.analyses.map((value) => value.id))
     )
       return null;
+    if (
+      data.sampleVersion !== undefined &&
+      !(Number.isInteger(data.sampleVersion) && (data.sampleVersion as number) > 0)
+    )
+      return null;
     const preferences = data.preferences;
     if (
       !object(preferences) ||
@@ -128,9 +138,19 @@ export function recordWear(
   today = localDate(),
 ): Workspace {
   if (!isCalendarDate(date) || !isCalendarDate(today) || date > today)
-    throw new RangeError('Choose a valid date on or before today.');
+    throw new RangeError(
+      t(
+        'Өнөөдөр эсвэл түүнээс өмнөх зөв огноо сонгоно уу.',
+        'Choose a valid date, today or earlier.',
+      ),
+    );
   if (!strings(garmentIds) || garmentIds.length > 20 || !unique(garmentIds))
-    throw new RangeError('Choose up to 20 different wardrobe pieces.');
+    throw new RangeError(
+      t(
+        'Шүүгээнээсээ 20 хүртэл өөр хувцас сонгоно уу.',
+        'Choose up to 20 different pieces from your wardrobe.',
+      ),
+    );
   const previous = data.wearLogs.find((log) => log.date === date);
   const allowed = new Set([
     ...data.garments.map((g) => g.id),
@@ -138,7 +158,10 @@ export function recordWear(
   ]);
   if (garmentIds.some((id) => !allowed.has(id)))
     throw new RangeError(
-      'Choose current wardrobe pieces or keep pieces already recorded for this day.',
+      t(
+        'Шүүгээнд байгаа хувцас сонгох эсвэл энэ өдөр аль хэдийн бүртгэсэн хувцсаа үлдээнэ үү.',
+        'Choose pieces from your wardrobe, or keep the ones already logged for this day.',
+      ),
     );
   return {
     ...data,
@@ -169,4 +192,112 @@ export function restoreGarment(data: Workspace, id: string): Workspace {
     garments: [...data.garments, item],
     archivedGarments: data.archivedGarments.filter((g) => g.id !== id),
   };
+}
+
+/**
+ * Brings a workspace saved with an older sample collection up to date. Bundled sample
+ * pieces (images under /assets/) are refreshed from the current collection, retired
+ * sample pieces are removed, and new sample pieces, looks and wear days are added.
+ * Personal uploads, favorites, laundry status and the person's own records are kept.
+ */
+export function upgradeSample(data: Workspace, sample = makeDemo()): Workspace {
+  if ((data.sampleVersion ?? 1) >= SAMPLE_VERSION) return data;
+  const current = new Map(sample.garments.map((g) => [g.id, g]));
+  const byName = new Map(
+    [...sample.garments, ...sample.analyses].map((item) => [
+      item.image.replace(/^.*\/|\.\w+$/g, ''),
+      item.image,
+    ]),
+  );
+  const image = (src: string) =>
+    byName.get(/^\/assets\/([a-z-]+)\.png$/.exec(src)?.[1] ?? '') ?? src;
+  const bundled = (g: Garment) => g.image.startsWith('/assets/');
+  const retired = new Set(
+    [...data.garments, ...data.archivedGarments]
+      .filter((g) => bundled(g) && !current.has(g.id))
+      .map((g) => g.id),
+  );
+  const refresh = (g: Garment): Garment => {
+    const s = current.get(g.id);
+    if (!s || !bundled(g)) return { ...g, image: image(g.image) };
+    const {
+      id: _id,
+      favorite: _favorite,
+      availability: _availability,
+      addedAt: _added,
+      ...look
+    } = s;
+    return { ...g, ...look };
+  };
+  const keep = (g: Garment) => !retired.has(g.id);
+  const archivedGarments = data.archivedGarments.filter(keep).map(refresh);
+  const known = new Set([...data.garments, ...archivedGarments].map((g) => g.id));
+  const garments = [
+    ...data.garments.filter(keep).map(refresh),
+    ...sample.garments.filter((g) => !known.has(g.id)),
+  ];
+  const active = new Set(garments.map((g) => g.id));
+  const all = new Set([...active, ...archivedGarments.map((g) => g.id)]);
+  const sampleLooks = new Map(sample.savedLooks.map((l) => [l.id, l]));
+  const sampleLogs = new Map(sample.wearLogs.map((w) => [w.id, w]));
+  const sampleAnalyses = new Map(sample.analyses.map((a) => [a.id, a]));
+  const stale = (ids: string[]) => ids.some((id) => retired.has(id));
+  // Versions 4 and 5 moved the app to Mongolian: sample looks and analyses take the new wording.
+  const toMongolian = (data.sampleVersion ?? 1) < 5;
+  const savedLooks = data.savedLooks.flatMap((l) => {
+    const named =
+      toMongolian && sampleLooks.has(l.id) ? { ...l, name: sampleLooks.get(l.id)!.name } : l;
+    if (!stale(l.garmentIds)) return [named];
+    const s = sampleLooks.get(l.id);
+    return s && s.garmentIds.every((id) => active.has(id))
+      ? [{ ...l, name: s.name, garmentIds: [...s.garmentIds] }]
+      : [];
+  });
+  const wearLogs = data.wearLogs.flatMap((w) => {
+    if (!stale(w.garmentIds)) return [w];
+    const s = sampleLogs.get(w.id);
+    const ids =
+      s && s.garmentIds.every((id) => all.has(id))
+        ? s.garmentIds
+        : w.garmentIds.filter((id) => !retired.has(id));
+    return ids.length ? [{ ...w, garmentIds: [...ids] }] : [];
+  });
+  const lookIds = new Set(savedLooks.map((l) => l.id));
+  const wearDays = new Set(wearLogs.map((w) => w.date));
+  const wearIds = new Set(wearLogs.map((w) => w.id));
+  return {
+    ...data,
+    garments,
+    archivedGarments,
+    savedLooks: [
+      ...savedLooks,
+      ...sample.savedLooks.filter(
+        (l) => !lookIds.has(l.id) && l.garmentIds.every((id) => active.has(id)),
+      ),
+    ],
+    wearLogs: [
+      ...wearLogs,
+      ...sample.wearLogs.filter(
+        (w) =>
+          !wearDays.has(w.date) && !wearIds.has(w.id) && w.garmentIds.every((id) => all.has(id)),
+      ),
+    ],
+    analyses: data.analyses.map((a) => {
+      const s = toMongolian && a.sample ? sampleAnalyses.get(a.id) : undefined;
+      return { ...a, image: image(a.image), ...(s && { title: s.title, note: s.note }) };
+    }),
+    preferences: toMongolian ? { ...data.preferences, language: 'mn' } : data.preferences,
+    sampleVersion: SAMPLE_VERSION,
+  };
+}
+
+/** Active pieces with no recorded wear in the last `days` days, e.g. forgotten favorites. */
+export function idleGarments(data: Workspace, days = 30, today = localDate()): Garment[] {
+  const start = new Date(`${today}T12:00:00`);
+  start.setDate(start.getDate() - days + 1);
+  const since = localDate(start);
+  const worn = new Set(
+    data.wearLogs.filter((w) => w.date >= since && w.date <= today).flatMap((w) => w.garmentIds),
+  );
+  return data.garments.filter((g) => !worn.has(g.id));
 }

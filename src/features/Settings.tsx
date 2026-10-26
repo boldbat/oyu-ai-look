@@ -1,25 +1,34 @@
 import { useEffect, useState } from 'react';
 import {
-  ArrowDownToLine,
-  ArrowUpRight,
+  ArrowCounterClockwise,
+  ArrowRight,
   Check,
-  Crown,
-  Database,
-  Globe2,
+  DownloadSimple,
+  Globe,
   Laptop,
   Moon,
+  PersonSimpleWalk,
   ShieldCheck,
-  Sparkles,
+  SpeakerHigh,
   Sun,
-  Trash2,
-} from 'lucide-react';
+  Trash,
+  VideoCamera,
+} from '@phosphor-icons/react';
 import { useApp } from '../lib/store';
 import { Dialog } from '../components/Dialog';
 import { CloudPreferences } from './CloudPreferences';
+import { Switch } from '../components/Switch';
+import { oyuPose } from '../lib/oyu';
+import { setOyuSettings, useOyuSettings } from '../lib/oyu-settings';
+import { speak, useVoiceReady } from '../lib/oyu-voice';
+import { t } from '../lib/lang';
+import './settings.css';
 export function Settings() {
   const { data, updatePreferences, resetWorkspace, notify, openAccount } = useApp();
   const [name, setName] = useState(data.preferences.name);
   const [resetOpen, setResetOpen] = useState(false);
+  const oyu = useOyuSettings();
+  const voiceReady = useVoiceReady(data.preferences.language);
   useEffect(() => setName(data.preferences.name), [data.preferences.name]);
   const exportData = () => {
     const blob = new Blob(
@@ -38,185 +47,345 @@ export function Settings() {
     a.download = 'oyu-ai-my-workspace.json';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify('Your workspace has been exported.');
+    notify(t('Таны орчныг татаж авлаа.', 'Your workspace has been downloaded.'));
   };
   return (
-    <div className="settings-page page-enter">
+    <div className="settings-page">
       <div className="page-heading">
         <div>
-          <div className="eyebrow">A SPACE THAT FEELS LIKE YOU</div>
-          <h1>Make yourself at home.</h1>
-          <p className="muted">Your preferences, your privacy, your personal style.</p>
+          <h1>{t('Тохиргоо', 'Settings')}</h1>
+          <p>
+            {t(
+              'Профайл, стиль, харагдах байдал болон өгөгдлөө эндээс удирдана.',
+              'Manage your profile, style, appearance and data here.',
+            )}
+          </p>
         </div>
       </div>
       <div className="settings-grid">
         <div className="settings-main">
-          <CloudPreferences />
-          <section className="card settings-card">
-            <div className="section-heading">
-              <div>
-                <h2>The little details</h2>
-                <p className="muted">Personalize your sample workspace.</p>
-              </div>
-              <span className="large-avatar">{data.preferences.name.slice(0, 1)}</span>
-            </div>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                if (name.trim()) {
-                  updatePreferences({ name: name.trim() });
-                  notify('A little more you. Profile saved.');
-                }
-              }}
-            >
-              <label className="field-label" htmlFor="display-name">
-                What should we call you?
-              </label>
-              <div className="inline-form">
-                <input
-                  id="display-name"
-                  className="field"
-                  value={name}
-                  maxLength={40}
-                  required
-                  onChange={(e) => setName(e.target.value)}
-                />
-                <button className="button secondary" type="submit">
-                  Save changes
-                </button>
-              </div>
-            </form>
-            <div className="setting-divider" />
-            <label className="field-label">
-              Your style, in a few words <span>Choose up to 3</span>
-            </label>
-            <div className="style-choices">
-              {[
-                'Minimal',
-                'Classic',
-                'Casual',
-                'Business',
-                'Street',
-                'Romantic',
-                'Sporty',
-                'Formal',
-              ].map((style) => (
-                <button
-                  key={style}
-                  aria-pressed={data.preferences.styles.includes(style)}
-                  className={`chip ${data.preferences.styles.includes(style) ? 'active' : ''}`}
-                  onClick={() => {
-                    const active = data.preferences.styles.includes(style);
-                    if (!active && data.preferences.styles.length >= 3) {
-                      notify('Pick up to three styles that feel most like you.');
-                      return;
-                    }
-                    updatePreferences({
-                      styles: active
-                        ? data.preferences.styles.filter((s) => s !== style)
-                        : [...data.preferences.styles, style],
-                    });
-                  }}
-                >
-                  {data.preferences.styles.includes(style) && <Check size={13} />} {style}
-                </button>
-              ))}
-            </div>
-          </section>
-          <section className="card settings-card">
-            <h2>Set the mood</h2>
-            <p className="muted">A comfortable view, morning to night.</p>
-            <div className="theme-options">
-              {(
-                [
-                  { id: 'light', name: 'Light', icon: Sun },
-                  { id: 'dark', name: 'Dark', icon: Moon },
-                  { id: 'system', name: 'System', icon: Laptop },
-                ] as const
-              ).map(({ id, name: label, icon: Icon }) => (
-                <button
-                  key={id}
-                  aria-pressed={data.preferences.theme === id}
-                  className={`theme-option theme-${id} ${data.preferences.theme === id ? 'selected' : ''}`}
-                  onClick={() => updatePreferences({ theme: id })}
-                >
-                  <div className="theme-preview">
-                    <span />
-                    <div>
-                      <i />
-                      <i />
-                      <i />
-                    </div>
-                  </div>
-                  <span>
-                    <Icon size={15} />
-                    {label}
-                    {data.preferences.theme === id && <Check size={14} />}
+          <section className="settings-section" aria-labelledby="settings-profile">
+            <header>
+              <h2 id="settings-profile">{t('Профайл', 'Profile')}</h2>
+              <p>
+                {t(
+                  'Жишээ орчинд харагдах нэр болон таны стиль.',
+                  'The name shown in your sample workspace, and your style.',
+                )}
+              </p>
+            </header>
+            <div className="settings-body">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (name.trim()) {
+                    updatePreferences({ name: name.trim() });
+                    notify(t('Профайл хадгалагдлаа.', 'Profile saved.'));
+                  }
+                }}
+              >
+                <label className="field-label" htmlFor="display-name">
+                  {t('Таныг юу гэж дуудах вэ?', 'What should we call you?')}
+                </label>
+                <div className="inline-form">
+                  <span className="large-avatar" aria-hidden="true">
+                    {data.preferences.name.slice(0, 1)}
                   </span>
-                </button>
-              ))}
-            </div>
-            <div className="setting-divider" />
-            <div className="setting-line">
-              <span className="setting-icon">
-                <Globe2 size={20} />
-              </span>
-              <div>
-                <h3>Language</h3>
-                <p>The web workspace is currently in English.</p>
+                  <input
+                    id="display-name"
+                    className="field"
+                    value={name}
+                    maxLength={40}
+                    required
+                    onChange={(e) => setName(e.target.value)}
+                  />
+                  <button className="button secondary" type="submit">
+                    {t('Хадгалах', 'Save')}
+                  </button>
+                </div>
+              </form>
+              <p className="field-label" id="settings-styles">
+                {t('Таны стиль', 'Your style')}{' '}
+                <span>{t('3 хүртэл сонгоно', 'Choose up to 3')}</span>
+              </p>
+              <div className="style-choices" role="group" aria-labelledby="settings-styles">
+                {[
+                  'Minimal',
+                  'Classic',
+                  'Casual',
+                  'Business',
+                  'Street',
+                  'Romantic',
+                  'Sporty',
+                  'Formal',
+                ].map((style) => (
+                  <button
+                    key={style}
+                    aria-pressed={data.preferences.styles.includes(style)}
+                    className={`chip ${data.preferences.styles.includes(style) ? 'active' : ''}`}
+                    onClick={() => {
+                      const active = data.preferences.styles.includes(style);
+                      if (!active && data.preferences.styles.length >= 3) {
+                        notify(
+                          t(
+                            'Танд хамгийн ойр гурав хүртэлх стиль сонгоно уу.',
+                            'Pick up to three styles that feel most like you.',
+                          ),
+                        );
+                        return;
+                      }
+                      updatePreferences({
+                        styles: active
+                          ? data.preferences.styles.filter((s) => s !== style)
+                          : [...data.preferences.styles, style],
+                      });
+                    }}
+                  >
+                    {data.preferences.styles.includes(style) && (
+                      <Check size={14} weight="regular" />
+                    )}
+                    {style}
+                  </button>
+                ))}
               </div>
-              <span className="subtle-pill">English</span>
             </div>
           </section>
-          <section className="card settings-card">
-            <h2>Always yours</h2>
-            <p className="muted">
-              Your sample collection stays in this browser. Take it with you anytime.
-            </p>
-            <div className="setting-line">
-              <span className="setting-icon">
-                <ArrowDownToLine size={20} />
-              </span>
-              <div>
-                <h3>Export your workspace</h3>
-                <p>Your clothes, saved looks, wear journal and preferences.</p>
+          <section className="settings-section" aria-labelledby="settings-appearance">
+            <header>
+              <h2 id="settings-appearance">{t('Харагдах байдал', 'Appearance')}</h2>
+              <p>
+                {t(
+                  'Өдрийн гэрэл эсвэл оройн бараан өнгө.',
+                  'Bright for daytime, dark for the evening.',
+                )}
+              </p>
+            </header>
+            <div className="settings-body">
+              <div className="theme-options">
+                {(
+                  [
+                    { id: 'light', name: t('Цайвар', 'Light'), icon: Sun },
+                    { id: 'dark', name: t('Бараан', 'Dark'), icon: Moon },
+                    { id: 'system', name: t('Системийн', 'System'), icon: Laptop },
+                  ] as const
+                ).map(({ id, name: label, icon: Icon }) => (
+                  <button
+                    key={id}
+                    aria-pressed={data.preferences.theme === id}
+                    className={`theme-option theme-${id} ${data.preferences.theme === id ? 'selected' : ''}`}
+                    onClick={() => updatePreferences({ theme: id })}
+                  >
+                    <div className="theme-preview" aria-hidden="true">
+                      <span />
+                      <div>
+                        <i />
+                        <i />
+                        <i />
+                      </div>
+                    </div>
+                    <span>
+                      <Icon size={16} />
+                      {label}
+                      {data.preferences.theme === id && <Check size={15} weight="regular" />}
+                    </span>
+                  </button>
+                ))}
               </div>
-              <button className="button secondary small" onClick={exportData}>
-                Export JSON
-              </button>
+              <div className="setting-line">
+                <Globe size={20} className="setting-icon" />
+                <div>
+                  <h3 id="settings-language">{t('Хэл', 'Language')}</h3>
+                  <p>{t('Вэб орчны хэлийг сонгоно.', 'Choose the interface language.')}</p>
+                </div>
+                {/* A span, not a div: `.setting-line > div` is the stretching text column. */}
+                <span className="segmented" role="group" aria-labelledby="settings-language">
+                  {/* Each language names itself, so these two labels are never translated. */}
+                  {(
+                    [
+                      ['mn', 'Монгол'],
+                      ['en', 'English'],
+                    ] as const
+                  ).map(([language, label]) => (
+                    <button
+                      key={language}
+                      type="button"
+                      lang={language}
+                      className={data.preferences.language === language ? 'active' : ''}
+                      aria-pressed={data.preferences.language === language}
+                      onClick={() => updatePreferences({ language })}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </span>
+              </div>
             </div>
-            <div className="setting-line">
-              <span className="setting-icon">
-                <Database size={20} />
-              </span>
-              <div>
-                <h3>Start fresh</h3>
-                <p>Restore the original sample collection on this device.</p>
+          </section>
+          <section className="settings-section" aria-labelledby="settings-oyu">
+            <header>
+              <h2 id="settings-oyu">{t('Oyu стилист', 'Oyu stylist')}</h2>
+              <p>
+                {t(
+                  'Таны хувийн стилист найз. Энэ төхөөрөмж дээр тохируулна.',
+                  'Your personal style companion. These settings apply to this device.',
+                )}
+              </p>
+            </header>
+            <div className="settings-body">
+              <div className="setting-line">
+                <img className="setting-oyu" src={oyuPose.happy} alt="" />
+                <div>
+                  <h3>{t('Бүх хуудсанд Oyu', 'Oyu on every page')}</h3>
+                  <p>
+                    {t(
+                      'Хувцас санал болгож, хувцас, хослолыг тань үнэлнэ.',
+                      'Suggests pieces and rates your clothes and outfits.',
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  label={t('Бүх хуудсанд Oyu', 'Oyu on every page')}
+                  checked={oyu.companion}
+                  onChange={(companion) => setOyuSettings({ companion })}
+                />
               </div>
-              <button className="button ghost small danger-text" onClick={() => setResetOpen(true)}>
-                Reset sample
-              </button>
+              <div className="setting-line">
+                <VideoCamera size={20} className="setting-icon" />
+                <div>
+                  <h3>{t('Шууд өмсөж үзэхэд Oyu', 'Oyu in live try-on')}</h3>
+                  <p>
+                    {t(
+                      'Хувцас бүрт сэтгэгдлээ хэлж, оноо өгч, дараагийнхыг санал болгоно.',
+                      'Shares a thought on each piece, gives it a score and suggests what to try next.',
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  label={t('Шууд өмсөж үзэхэд Oyu', 'Oyu in live try-on')}
+                  checked={oyu.live}
+                  onChange={(live) => setOyuSettings({ live })}
+                />
+              </div>
+              <div className="setting-line">
+                <PersonSimpleWalk size={20} className="setting-icon" />
+                <div>
+                  <h3>{t('Oyu таныг харах', 'Let Oyu see you')}</h3>
+                  <p>
+                    {t(
+                      'Бүтэн харагдаж байгаа эсэх, эргэх, поз гаргахыг тань танина. Зөвхөн энэ төхөөрөмж дээр ажиллах тул зураг хаашаа ч илгээгдэхгүй.',
+                      'Notices when you’re fully in frame, turning or striking a pose. It runs only on this device, so no images are sent anywhere.',
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  label={t('Oyu таныг харах', 'Let Oyu see you')}
+                  checked={oyu.live && oyu.vision}
+                  disabled={!oyu.live}
+                  onChange={(vision) => setOyuSettings({ vision })}
+                />
+              </div>
+              <div className="setting-line">
+                <SpeakerHigh size={20} className="setting-icon" />
+                <div>
+                  <h3>{t('Oyu-гийн дуу хоолой', 'Oyu’s voice')}</h3>
+                  <p>
+                    {voiceReady
+                      ? t(
+                          'Шууд өмсөж үзэх үед хэлсэн үгээ чангаар уншина. Хөтчийн өөрийн дуу хоолойг ашиглана.',
+                          'Reads her live try-on lines aloud, using your browser’s own voice.',
+                        )
+                      : t(
+                          'Энэ хөтөчид монгол дуу хоолой алга. Англи хэл дээр Oyu чангаар ярьж чадна.',
+                          'This browser has no voice for this language yet.',
+                        )}
+                  </p>
+                </div>
+                <Switch
+                  label={t('Oyu-гийн дуу хоолой', 'Oyu’s voice')}
+                  checked={oyu.live && oyu.voice && voiceReady}
+                  disabled={!oyu.live || !voiceReady}
+                  onChange={(voice) => {
+                    setOyuSettings({ voice });
+                    // A short hello, so the user hears what they turned on.
+                    if (voice)
+                      speak(
+                        t('Сайн байна уу! Би Oyu.', 'Hi! I’m Oyu, your stylist.'),
+                        data.preferences.language,
+                      );
+                  }}
+                />
+              </div>
+            </div>
+          </section>
+          <CloudPreferences />
+          <section className="settings-section" aria-labelledby="settings-data">
+            <header>
+              <h2 id="settings-data">{t('Өгөгдөл', 'Data')}</h2>
+              <p>
+                {t(
+                  'Жишээ цуглуулга энэ хөтөчид хадгалагдана.',
+                  'Your sample collection stays in this browser.',
+                )}
+              </p>
+            </header>
+            <div className="settings-body">
+              <div className="setting-line">
+                <DownloadSimple size={20} className="setting-icon" />
+                <div>
+                  <h3>{t('Орчноо татаж авах', 'Download your workspace')}</h3>
+                  <p>
+                    {t(
+                      'Хувцас, хадгалсан хослол, өмссөн тэмдэглэл болон тохиргоо.',
+                      'Your clothes, saved looks, wear log and preferences.',
+                    )}
+                  </p>
+                </div>
+                <button className="button secondary small" onClick={exportData}>
+                  {t('JSON татах', 'Download JSON')}
+                </button>
+              </div>
+              <div className="setting-line">
+                <ArrowCounterClockwise size={20} className="setting-icon" />
+                <div>
+                  <h3>{t('Шинээр эхлэх', 'Start fresh')}</h3>
+                  <p>
+                    {t(
+                      'Энэ төхөөрөмж дээр анхны жишээ цуглуулгыг сэргээнэ.',
+                      'Restore the original sample collection on this device.',
+                    )}
+                  </p>
+                </div>
+                <button
+                  className="button secondary small danger-text"
+                  onClick={() => setResetOpen(true)}
+                >
+                  {t('Жишээг сэргээх', 'Reset sample')}
+                </button>
+              </div>
             </div>
           </section>
         </div>
         <aside className="settings-aside">
-          <section className="membership-card" id="membership">
-            <span className="membership-icon">
-              <Crown size={23} />
-            </span>
-            <div className="eyebrow">OYU AI MEMBERSHIP</div>
-            <h2>
-              A wardrobe with
-              <br />
-              more possibility.
+          <section className="membership-card" id="membership" aria-labelledby="membership-title">
+            <p className="membership-label">Oyu Pro</p>
+            <h2 id="membership-title">
+              {t(
+                'Шүүгээгээ бүрэн ашиглах гишүүнчлэл',
+                'A membership that makes the most of your wardrobe',
+              )}
             </h2>
-            <p>Your personal style, thoughtfully supported.</p>
+            <p>
+              {t(
+                'Таны хувийн стилийг өдөр бүр анхааралтай дэмжинэ.',
+                'Your personal style, thoughtfully supported every day.',
+              )}
+            </p>
             <ul>
               {[
-                'AI outfit scorecards',
-                'A wardrobe that works together',
-                'Personal style insights',
-                'Photo and Live try-on',
+                t('Хослолын AI үнэлгээ', 'AI outfit analysis'),
+                t('Хоорондоо зохицох шүүгээ', 'A wardrobe that works together'),
+                t('Хувийн стилийн зөвлөмж', 'Personal style tips'),
+                t('Зургаар болон шууд өмсөж үзэх', 'Photo and live try-on'),
               ].map((s) => (
                 <li key={s}>
                   <Check size={16} />
@@ -225,42 +394,48 @@ export function Settings() {
               ))}
             </ul>
             <button className="button full-width" onClick={openAccount}>
-              View my account <ArrowUpRight size={16} />
+              {t('Бүртгэлээ харах', 'View my account')} <ArrowRight size={16} />
             </button>
             <p className="membership-note">
-              Your existing account’s access applies. Web subscription checkout is not available
-              yet.
+              {t(
+                'Таны одоогийн бүртгэлийн эрх хүчинтэй. Вэбээр захиалга хийх боломж хараахан нээгдээгүй.',
+                'Your current account access applies. Web checkout isn’t available yet.',
+              )}
             </p>
           </section>
-          <section className="card privacy-card">
-            <ShieldCheck size={26} />
-            <h3>Personal means private.</h3>
+          <section className="privacy-card" aria-labelledby="privacy-title">
+            <ShieldCheck size={24} />
+            <h3 id="privacy-title">{t('Зураг тань хувийн хэвээр', 'Your photos stay private')}</h3>
             <p>
-              Sample uploads stay on this device. Connected AI processing asks for your explicit
-              consent before sending a photo.
+              {t(
+                'Жишээ орчинд оруулсан зураг энэ төхөөрөмж дээр үлдэнэ. Холбогдсон AI боловсруулалт зураг илгээхээс өмнө таны тодорхой зөвшөөрлийг асууна.',
+                'Photos you add to the sample workspace stay on this device. Connected AI processing asks for your clear consent before sending a photo.',
+              )}
             </p>
             <button className="text-link" onClick={openAccount}>
-              Manage my real account <ArrowRightIcon />
+              {t('Жинхэнэ бүртгэлээ удирдах', 'Manage my real account')}{' '}
+              <ArrowRight size={15} weight="regular" />
             </button>
           </section>
-          <div className="quiet-note">
-            <Sparkles size={16} />
-            <p>
-              Sample insights are illustrative. Your real style journey starts when you connect your
-              account.
-            </p>
-          </div>
+          <p className="quiet-note">
+            {t(
+              'Жишээ зөвлөмж зөвхөн үзүүлэн юм. Бүртгэлээ холбосноор таны жинхэнэ стилийн түүх эхэлнэ.',
+              'Sample tips are for illustration only. Your real style history starts when you connect your account.',
+            )}
+          </p>
         </aside>
       </div>
       {resetOpen && (
-        <Dialog title="A fresh start?" onClose={() => setResetOpen(false)}>
+        <Dialog title={t('Шинээр эхлэх үү?', 'Start fresh?')} onClose={() => setResetOpen(false)}>
           <p className="muted">
-            This replaces your local wardrobe, uploads, saved looks and wear records with the
-            original sample collection. Your connected Oyu AI account is unaffected.
+            {t(
+              'Энэ нь энэ төхөөрөмж дээрх шүүгээ, оруулсан зураг, хадгалсан хослол, өмссөн бүртгэлийг анхны жишээ цуглуулгаар солино. Холбогдсон Oyu AI бүртгэлд нөлөөлөхгүй.',
+              'This replaces the wardrobe, uploads, saved looks and wear log on this device with the original sample collection. Your connected Oyu AI account isn’t affected.',
+            )}
           </p>
           <div className="dialog-actions">
             <button className="button secondary" onClick={() => setResetOpen(false)}>
-              Keep my workspace
+              {t('Орчноо үлдээх', 'Keep my workspace')}
             </button>
             <button
               className="button danger"
@@ -270,14 +445,11 @@ export function Settings() {
                 setResetOpen(false);
               }}
             >
-              <Trash2 size={15} /> Reset sample
+              <Trash size={15} weight="regular" /> {t('Жишээг сэргээх', 'Reset sample')}
             </button>
           </div>
         </Dialog>
       )}
     </div>
   );
-}
-function ArrowRightIcon() {
-  return <ArrowUpRight size={15} />;
 }

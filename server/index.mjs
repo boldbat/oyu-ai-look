@@ -9,6 +9,10 @@ const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const decart = createDecartBridge({
   apiKey: process.env.DECART_API_KEY,
   model: process.env.DECART_MODEL || 'lucy-vton-3.6',
+  maxSessionSeconds: process.env.DECART_MAX_SESSION_SECONDS
+    ? Number(process.env.DECART_MAX_SESSION_SECONDS)
+    : null,
+  speed: process.env.DECART_SPEED === 'fast' ? 'fast' : 'standard',
   allowedOrigins: process.env.PUBLIC_WEB_ORIGIN
     ? [new URL(process.env.PUBLIC_WEB_ORIGIN).origin]
     : [],

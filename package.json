@@ -8,6 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "npm run start",
     "test": "vitest run",
+    "rehearse": "node scripts/rehearse-live.mjs",
     "test:firebase": "firebase emulators:exec --only firestore --project demo-oyu-ai \"vitest run tests/firebase-rules.test.ts\"",
     "firebase:rules": "firebase deploy --only firestore:rules --project oyu-i-look",
     "typecheck": "tsc -b --pretty false",
@@ -18,10 +19,11 @@
     "@grpc/grpc-js": "^1.14.6"
   },
   "dependencies": {
+    "@mediapipe/tasks-vision": "0.10.35",
+    "@phosphor-icons/react": "^2.1.10",
     "@vitejs/plugin-react": "^6.1.2",
     "firebase": "^13.0.0",
     "jose": "^6.2.12",
-    "lucide-react": "^0.468.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "typescript": "~5.9.3",
@@ -35,6 +37,7 @@
     "@types/react-dom": "^19.2.0",
     "@types/ws": "^8.18.2",
     "firebase-tools": "^15.34.0",
+    "playwright-core": "1.63.0",
     "prettier": "^3.9.10",
     "vitest": "^5.0.4"
   }

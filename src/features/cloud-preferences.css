@@ -1,64 +1,75 @@
-.cloud-preferences-icon {
-  color: var(--accent);
-  flex-shrink: 0;
-}
 .cloud-preferences-disclosure {
-  color: var(--secondary);
-  font-size: 12px;
-  line-height: 1.7;
   margin: 0 0 20px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--ink-2);
 }
 .cloud-preferences-account {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
 }
 .cloud-preferences-account strong,
 .cloud-preferences-account small {
   display: block;
   overflow-wrap: anywhere;
 }
+.cloud-preferences-account strong {
+  font-size: 15px;
+  font-weight: 500;
+}
 .cloud-preferences-account small {
-  color: var(--secondary);
-  margin-top: 5px;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--ink-3);
 }
 .cloud-preferences-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 8px;
 }
 .cloud-preferences-error,
 .cloud-preferences-message {
-  font-size: 12px;
-  line-height: 1.7;
   margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: var(--r-sm);
+  font-size: 13px;
+  line-height: 1.6;
 }
 .cloud-preferences-error {
-  color: var(--danger, #ad4141);
+  background: var(--danger-soft);
+  color: var(--danger);
 }
 .cloud-preferences-message {
+  background: var(--accent-soft);
   color: var(--ink);
 }
 .cloud-preferences-provider {
   display: block;
-  color: var(--secondary);
-  font-size: 10px;
-  margin-top: 18px;
+  margin-top: 16px;
+  font-size: 12px;
+  color: var(--ink-3);
 }
 .cloud-preferences-preview {
   display: grid;
-  gap: 12px;
-  margin: 22px 0;
+  margin: 20px 0;
+  border-top: 1px solid var(--line);
 }
 .cloud-preferences-preview div {
   display: grid;
-  grid-template-columns: 90px 1fr;
+  grid-template-columns: 140px 1fr;
   gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 14px;
 }
 .cloud-preferences-preview dt {
-  color: var(--secondary);
+  color: var(--ink-3);
 }
 .cloud-preferences-preview dd {
   margin: 0;

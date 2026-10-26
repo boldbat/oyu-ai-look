@@ -1,65 +1,167 @@
 /** Direct Decart pitch client. Only the same-origin server knows the provider key.
  * Images are transient. Hosted sessions use a Firebase ID token; provider keys never reach the client.
  */
+import { localized } from './lang';
+
 export const DECART_MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 export type DecartImageMime = 'image/jpeg' | 'image/png' | 'image/webp';
-export type DecartDuration = 30 | 60;
+/** Requested session length; null runs until Stop or the server's own cap. */
+export type DecartDuration = 30 | 60 | null;
+/** Where the garment goes on the body; the server turns it into a region-specific prompt. */
+export interface DecartGarment {
+  region: 'upper' | 'lower' | 'outfit' | 'footwear' | 'layer';
+  description: string;
+}
 export interface DecartStatus {
   configured: boolean;
   model: string;
-  maxDurationSeconds: 60;
+  /** Server cap in seconds, or null when sessions run until Stop. */
+  maxDurationSeconds: number | null;
+  fast: boolean;
   transport?: 'websocket-init';
   requiresSignIn?: true;
 }
 export interface DecartConnection {
   socket: WebSocket;
-  maxDurationSeconds: DecartDuration;
+  maxDurationSeconds: number | null;
 }
 interface DecartTicket {
   id: string;
   ticket: string;
   expiresIn: 15;
-  maxDurationSeconds: DecartDuration;
+  maxDurationSeconds: number | null;
+}
+const seconds = (value: unknown): value is number | null =>
+  value === null ||
+  (Number.isInteger(value) && (value as number) >= 10 && (value as number) <= 86_400);
+function garmentPayload(garment: DecartGarment | undefined) {
+  if (garment === undefined) return {};
+  if (
+    !['upper', 'lower', 'outfit', 'footwear', 'layer'].includes(garment.region) ||
+    !/^[\p{L}\p{N} ,.'’&()/-]{3,160}$/u.test(garment.description)
+  )
+    throw new DecartApiError('decart_invalid_request');
+  return { garment: { region: garment.region, description: garment.description } };
 }
 
-const messages: Record<string, string> = {
-  decart_not_configured: 'Live try-on is not configured on this server yet.',
-  decart_unconfigured: 'Live try-on is not configured on this server yet.',
-  decart_invalid_image: 'Choose a valid JPEG, PNG, or WebP clothing image up to 4 MB.',
-  decart_image_too_large: 'Choose a clothing image up to 4 MB.',
-  decart_session_active:
-    'A preview is already running or starting. Stop it or wait a moment before trying again.',
-  decart_origin_denied: 'Open the app from an allowed address and try again.',
-  decart_invalid_request: 'Choose a 30 or 60 second session and try again.',
-  decart_invalid_response: 'The live service returned a response this browser cannot use.',
-  decart_connection_closed:
-    'The live connection has ended. Start a new preview to try another item.',
-  decart_unavailable: 'The live service is unavailable. Please try again later.',
-  decart_network_error: 'Could not reach the live service. Check your connection and try again.',
-  decart_timeout: 'The live service took too long to respond. Please try again.',
-  decart_busy: 'The live service is currently busy. Please try again shortly.',
-  live_sign_in_required: 'Sign in with Google before starting live try-on.',
-  live_access_denied:
-    'This Google account is not enabled for the live demo. Use your authorized account.',
-  rate_limited: 'Too many live requests. Please wait before trying again.',
-  provider_unavailable: 'The live provider is temporarily unavailable. Please try again later.',
-  live_tryon_disabled: 'Live try-on is not currently enabled on this server.',
-  live_decart_key_invalid:
-    'Decart could not authorize this session. Check the server’s Decart API key.',
-  live_decart_credits:
-    'The Decart account has no available credits. Add credits before starting again.',
-  live_decart_busy: 'Decart is busy right now. Wait a moment, then start again.',
-  live_decart_unavailable: 'Decart could not start the video stream. Please try again.',
-  live_decart_token_invalid: 'Decart could not authorize a timed session. Please try again.',
-  live_decart_timeout: 'Decart took too long to connect. Please try again.',
-  live_decart_network: 'This network could not connect the AI video. Try another network.',
-  live_decart_reference_rejected:
-    'Decart could not use this garment image. Choose a clear clothing photo and try again.',
-  live_decart_reference_timeout:
-    'Decart did not confirm the new garment in time. Start again to continue.',
-  selection_item_unavailable: 'Decart could not apply that garment. Choose another clothing photo.',
-  selection_invalid: 'The garment could not be applied yet. Wait for live video, then try again.',
-};
+const messages = localized({
+  decart_not_configured: [
+    'Энэ серверт шууд өмсөж үзэх хараахан тохируулагдаагүй байна.',
+    'Live try-on isn’t set up on this server yet.',
+  ],
+  decart_unconfigured: [
+    'Энэ серверт шууд өмсөж үзэх хараахан тохируулагдаагүй байна.',
+    'Live try-on isn’t set up on this server yet.',
+  ],
+  decart_invalid_image: [
+    '4 MB хүртэл хэмжээтэй JPEG, PNG эсвэл WebP форматтай хувцасны зураг сонгоно уу.',
+    'Choose a JPEG, PNG, or WebP clothing image up to 4 MB.',
+  ],
+  decart_image_too_large: [
+    '4 MB хүртэл хэмжээтэй хувцасны зураг сонгоно уу.',
+    'Choose a clothing image up to 4 MB.',
+  ],
+  decart_session_active: [
+    'Шууд сесс аль хэдийн ажиллаж эсвэл эхэлж байна. Түүнийг зогсоох эсвэл түр хүлээгээд дахин оролдоно уу.',
+    'A live session is already running or starting. Stop it or wait a moment before trying again.',
+  ],
+  decart_origin_denied: [
+    'Аппыг зөвшөөрөгдсөн хаягаас нээгээд дахин оролдоно уу.',
+    'Open the app from an allowed address and try again.',
+  ],
+  decart_invalid_request: [
+    'Өмсөж үзэх хүсэлтийг бэлтгэж чадсангүй. Өөр хувцас сонгоно уу.',
+    'We couldn’t prepare that try-on. Choose another piece.',
+  ],
+  decart_invalid_response: [
+    'Шууд үйлчилгээ энэ хөтчийн ашиглаж чадахгүй хариу буцаалаа.',
+    'The live service returned a response this browser can’t use.',
+  ],
+  decart_connection_closed: [
+    'Шууд холболт дууслаа. Өөр хувцас өмсөж үзэхийн тулд дахин эхлүүлнэ үү.',
+    'The live connection has ended. Start again to try on another piece.',
+  ],
+  decart_unavailable: [
+    'Шууд үйлчилгээ одоогоор ажиллахгүй байна. Дараа дахин оролдоно уу.',
+    'The live service is unavailable right now. Please try again later.',
+  ],
+  decart_network_error: [
+    'Шууд үйлчилгээнд холбогдож чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.',
+    'Couldn’t reach the live service. Check your connection and try again.',
+  ],
+  decart_timeout: [
+    'Шууд үйлчилгээний хариу хэт удлаа. Дахин оролдоно уу.',
+    'The live service took too long to respond. Please try again.',
+  ],
+  decart_busy: [
+    'Шууд үйлчилгээ одоо завгүй байна. Хэсэг хугацааны дараа дахин оролдоно уу.',
+    'The live service is busy right now. Please try again shortly.',
+  ],
+  live_sign_in_required: [
+    'Шууд өмсөж үзэхээс өмнө Google-ээр нэвтэрнэ үү.',
+    'Sign in with Google before starting live try-on.',
+  ],
+  live_access_denied: [
+    'Энэ Google бүртгэлд шууд демо ашиглах эрх нээгдээгүй байна. Эрхтэй бүртгэлээрээ нэвтэрнэ үү.',
+    'This Google account isn’t enabled for the live demo. Sign in with your authorized account.',
+  ],
+  rate_limited: [
+    'Хэт олон хүсэлт илгээлээ. Түр хүлээгээд дахин оролдоно уу.',
+    'Too many requests. Please wait a moment and try again.',
+  ],
+  provider_unavailable: [
+    'Шууд үйлчилгээ үзүүлэгч түр ажиллахгүй байна. Дараа дахин оролдоно уу.',
+    'The live provider is temporarily unavailable. Please try again later.',
+  ],
+  live_tryon_disabled: [
+    'Энэ серверт шууд өмсөж үзэх одоогоор идэвхгүй байна.',
+    'Live try-on isn’t currently enabled on this server.',
+  ],
+  live_decart_key_invalid: [
+    'Decart энэ сессийг баталгаажуулж чадсангүй. Серверийн Decart API түлхүүрийг шалгана уу.',
+    'Decart couldn’t authorize this session. Check the server’s Decart API key.',
+  ],
+  live_decart_credits: [
+    'Decart бүртгэлд кредит үлдээгүй байна. Дахин эхлүүлэхээс өмнө кредит нэмнэ үү.',
+    'The Decart account has no credits left. Add credits before starting again.',
+  ],
+  live_decart_busy: [
+    'Decart одоо завгүй байна. Түр хүлээгээд дахин эхлүүлнэ үү.',
+    'Decart is busy right now. Wait a moment, then start again.',
+  ],
+  live_decart_unavailable: [
+    'Decart видео дамжуулалтыг эхлүүлж чадсангүй. Дахин оролдоно уу.',
+    'Decart couldn’t start the video stream. Please try again.',
+  ],
+  live_decart_token_invalid: [
+    'Decart хугацаатай сессийг баталгаажуулж чадсангүй. Дахин оролдоно уу.',
+    'Decart couldn’t authorize a timed session. Please try again.',
+  ],
+  live_decart_timeout: [
+    'Decart-тай холбогдоход хэт удлаа. Дахин оролдоно уу.',
+    'Decart took too long to connect. Please try again.',
+  ],
+  live_decart_network: [
+    'Энэ сүлжээгээр AI видеог холбож чадсангүй. Өөр сүлжээ ашиглана уу.',
+    'This network couldn’t connect the AI video. Try another network.',
+  ],
+  live_decart_reference_rejected: [
+    'Decart энэ хувцасны зургийг ашиглаж чадсангүй. Тод харагдах хувцасны зураг сонгоод дахин оролдоно уу.',
+    'Decart couldn’t use this clothing image. Choose a clear photo of the piece and try again.',
+  ],
+  live_decart_reference_timeout: [
+    'Decart шинэ хувцсыг цагтаа баталгаажуулсангүй. Үргэлжлүүлэхийн тулд дахин эхлүүлнэ үү.',
+    'Decart didn’t confirm the new piece in time. Start again to continue.',
+  ],
+  selection_item_unavailable: [
+    'Decart тэр хувцсыг өмсгөж чадсангүй. Өөр хувцасны зураг сонгоно уу.',
+    'Decart couldn’t put on that piece. Choose another clothing photo.',
+  ],
+  selection_invalid: [
+    'Хувцсыг одоохондоо өмсгөх боломжгүй. Шууд видео гарахыг хүлээгээд дахин оролдоно уу.',
+    'The piece can’t be applied just yet. Wait for the live video, then try again.',
+  ],
+}) as Record<string, string>;
 
 export class DecartApiError extends Error {
   constructor(
@@ -200,7 +302,8 @@ export async function decartStatus(signal?: AbortSignal): Promise<DecartStatus> 
     typeof result.model !== 'string' ||
     !result.model.length ||
     result.model.length > 120 ||
-    result.maxDurationSeconds !== 60
+    !seconds(result.maxDurationSeconds ?? null) ||
+    (result.speed !== undefined && result.speed !== 'standard' && result.speed !== 'fast')
   ) {
     throw new DecartApiError('decart_invalid_response');
   }
@@ -212,7 +315,8 @@ export async function decartStatus(signal?: AbortSignal): Promise<DecartStatus> 
   return {
     configured: result.configured,
     model: result.model,
-    maxDurationSeconds: 60,
+    maxDurationSeconds: (result.maxDurationSeconds ?? null) as number | null,
+    fast: result.speed === 'fast',
     ...(result.transport === 'websocket-init'
       ? { transport: 'websocket-init', requiresSignIn: true }
       : {}),
@@ -228,13 +332,15 @@ export async function createDecartSocket(
   durationSeconds: DecartDuration,
   signal?: AbortSignal,
   hosted?: { transport: 'websocket-init'; idToken: string },
+  garment?: DecartGarment,
 ): Promise<DecartConnection> {
   const origin = pageUrl();
   cancelled(signal);
   if (typeof WebSocket === 'undefined') throw new DecartApiError('decart_unavailable');
-  if (![30, 60].includes(durationSeconds)) throw new DecartApiError('decart_invalid_request');
+  if (![30, 60, null].includes(durationSeconds)) throw new DecartApiError('decart_invalid_request');
+  const hint = garmentPayload(garment);
   const payload = await imagePayload(image, signal);
-  let maxDurationSeconds: DecartDuration = durationSeconds;
+  let maxDurationSeconds: number | null = durationSeconds;
   let url: URL;
   if (hosted) {
     if (
@@ -248,7 +354,7 @@ export async function createDecartSocket(
   } else {
     const result = await request(
       '/__lookluxe/decart/sessions',
-      { ...payload, durationSeconds },
+      { ...payload, durationSeconds, ...hint },
       signal,
     );
     cancelled(signal);
@@ -260,8 +366,9 @@ export async function createDecartSocket(
       typeof result.ticket !== 'string' ||
       !/^[A-Za-z0-9_-]{16,256}$/.test(result.ticket) ||
       result.expiresIn !== 15 ||
-      (result.maxDurationSeconds !== 30 && result.maxDurationSeconds !== 60) ||
-      result.maxDurationSeconds > durationSeconds
+      !seconds(result.maxDurationSeconds) ||
+      (durationSeconds !== null &&
+        (result.maxDurationSeconds === null || result.maxDurationSeconds > durationSeconds))
     ) {
       throw new DecartApiError('decart_invalid_response');
     }
@@ -285,7 +392,13 @@ export async function createDecartSocket(
         if (signal?.aborted || socket.readyState !== 1) return;
         try {
           socket.send(
-            JSON.stringify({ type: 'init', ...payload, durationSeconds, idToken: hosted.idToken }),
+            JSON.stringify({
+              type: 'init',
+              ...payload,
+              durationSeconds,
+              idToken: hosted.idToken,
+              ...hint,
+            }),
           );
         } catch {
           socket.close();
@@ -321,10 +434,12 @@ export async function updateDecartReference(
   image: Blob,
   seq: number,
   signal?: AbortSignal,
+  garment?: DecartGarment,
 ): Promise<void> {
   cancelled(signal);
   if (!Number.isInteger(seq) || seq < 1 || seq > 2_147_483_647)
     throw new DecartApiError('decart_invalid_request');
+  const hint = garmentPayload(garment);
   if (!ownedSockets.has(socket) || socket.readyState !== 1)
     throw new DecartApiError('decart_connection_closed');
   const payload = await imagePayload(image, signal);
@@ -332,7 +447,7 @@ export async function updateDecartReference(
   if (!ownedSockets.has(socket) || socket.readyState !== 1)
     throw new DecartApiError('decart_connection_closed');
   try {
-    socket.send(JSON.stringify({ type: 'reference', ...payload, seq }));
+    socket.send(JSON.stringify({ type: 'reference', ...payload, seq, ...hint }));
   } catch {
     throw new DecartApiError('decart_connection_closed');
   }

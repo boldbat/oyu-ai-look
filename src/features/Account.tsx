@@ -4,19 +4,20 @@ import {
   Archive,
   ArrowLeft,
   ArrowRight,
+  ArrowsClockwise,
   Check,
-  CheckCircle2,
-  Cloud,
-  ImagePlus,
-  LoaderCircle,
-  LockKeyhole,
-  LogOut,
+  CheckCircle,
+  CircleNotch,
+  CloudSlash,
+  ImageSquare,
+  LockKey,
   Plus,
-  RefreshCw,
+  Scan,
   ShieldCheck,
-  Shirt,
-  Sparkles,
-} from 'lucide-react';
+  SignOut,
+  TShirt,
+  X,
+} from '@phosphor-icons/react';
 import { Dialog } from '../components/Dialog';
 import { useApp } from '../lib/store';
 import {
@@ -38,17 +39,76 @@ import type {
   ImageOperation,
   ProfileResponse,
 } from '../lib/api';
+import { colorLabel, colorLabels, formatDate } from '../lib/i18n';
+import { localized, t } from '../lib/lang';
+import { categoryLabels } from '../lib/types';
 import './account.css';
 import AccountLooks from './AccountLooks';
 
 type AuthMode = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
-const dateLabel = (value: string) =>
-  new Date(value).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+const dateLabel = (value: string) => formatDate(value, 'year');
 const humanize = (value: string) => value.replaceAll('_', ' ');
+/** A service key’s label in the current language; unknown values are shown as sent. */
+const labelFor = (labels: Record<string, string>, value: string) => {
+  const text = humanize(value);
+  const match = Object.entries(labels).find(
+    ([key]) => humanize(key).toLowerCase() === text.toLowerCase(),
+  );
+  return match?.[1] ?? text.charAt(0).toUpperCase() + text.slice(1);
+};
+const colorText = (value: string) =>
+  labelFor(
+    Object.fromEntries(Object.keys(colorLabels).map((key) => [key, colorLabel(key)])),
+    value,
+  );
+const categoryText = (value: string) =>
+  labelFor({ ...categoryLabels, underlayer: t('Дотуур давхарга', 'Underlayers') }, value);
+const styleText = (value: string) => labelFor({}, value);
+const tierLabels = localized({
+  trial: ['Туршилт', 'Trial'],
+  pro: ['Pro', 'Pro'],
+  expired: ['Дууссан', 'Expired'],
+});
+const availabilityLabels = localized({
+  available: ['Өмсөхөд бэлэн', 'Ready to wear'],
+  laundry: ['Угаалгад байгаа', 'In the laundry'],
+  repair: ['Засварт байгаа', 'In repair'],
+  lent_out: ['Зээлүүлсэн', 'Lent out'],
+  stored: ['Хадгалалтад', 'In storage'],
+});
+const garmentStatusLabels = localized({
+  processing: ['Боловсруулж байна', 'Processing'],
+  pending_confirmation: ['Баталгаажуулаагүй', 'Not confirmed'],
+  active: ['Идэвхтэй', 'Active'],
+  archived: ['Архивласан', 'Archived'],
+  failed: ['Амжилтгүй', 'Failed'],
+});
+const scoreStatusLabels = localized({
+  analyzing: ['Үнэлж байна', 'Analyzing'],
+  scored: ['Үнэлсэн', 'Scored'],
+  failed: ['Амжилтгүй', 'Failed'],
+});
+const layerLabels = localized({
+  base: ['Суурь', 'Base'],
+  mid: ['Дунд', 'Mid'],
+  outer: ['Гадна', 'Outer'],
+  standalone: ['Бие даасан', 'Standalone'],
+});
+const patternLabels = localized({
+  solid: ['Хээгүй', 'Solid'],
+  striped: ['Судалтай', 'Striped'],
+  plaid: ['Дөрвөлжин хээтэй', 'Plaid'],
+  checked: ['Дөрвөлжин хээтэй', 'Checked'],
+  floral: ['Цэцэгтэй', 'Floral'],
+  polka_dot: ['Цэгэн хээтэй', 'Polka dot'],
+  graphic: ['Зурагтай', 'Graphic'],
+});
+const seasonLabels = localized({
+  spring: ['хавар', 'spring'],
+  summer: ['зун', 'summer'],
+  autumn: ['намар', 'fall'],
+  winter: ['өвөл', 'winter'],
+});
 const cancelled = (error: unknown) => error instanceof DOMException && error.name === 'AbortError';
 
 export function Account() {
@@ -57,7 +117,11 @@ export function Account() {
   if (!accountOpen) return null;
   return (
     <Dialog
-      title={user ? 'Your Oyu AI account' : 'Your style, everywhere'}
+      title={
+        user
+          ? t('Таны Oyu AI бүртгэл', 'Your Oyu AI account')
+          : t('Oyu AI бүртгэл', 'Oyu AI account')
+      }
       wide={!!user}
       onClose={() => setAccountOpen(false)}
     >
@@ -112,11 +176,21 @@ function AuthForm() {
       ['register', 'reset'].includes(mode) &&
       (Array.from(password).length < 8 || Array.from(password).length > 128)
     ) {
-      setError('Choose a password between 8 and 128 characters.');
+      setError(
+        t(
+          '8–128 тэмдэгттэй нууц үг сонгоно уу.',
+          'Choose a password between 8 and 128 characters.',
+        ),
+      );
       return;
     }
     if (['verify', 'reset'].includes(mode) && !/^\d{8}$/.test(code)) {
-      setError('Enter the eight-digit code from your email.');
+      setError(
+        t(
+          'Имэйлээр ирсэн 8 оронтой кодыг оруулна уу.',
+          'Enter the eight-digit code from your email.',
+        ),
+      );
       return;
     }
     setBusy(true);
@@ -138,7 +212,12 @@ function AuthForm() {
         await accountApi.resetPassword(challenge.challenge_id, code, password);
         changeMode('login');
         setChallenge(null);
-        setNotice('Password updated. Sign in with your new password.');
+        setNotice(
+          t(
+            'Нууц үг шинэчлэгдлээ. Шинэ нууц үгээрээ нэвтэрнэ үү.',
+            'Password updated. Sign in with your new password.',
+          ),
+        );
       }
     } catch (cause) {
       failure(cause);
@@ -153,7 +232,12 @@ function AuthForm() {
     try {
       rememberChallenge(await accountApi.resend(challenge.challenge_id));
       setCode('');
-      setNotice('A new code has been requested. Check your email.');
+      setNotice(
+        t(
+          'Шинэ код илгээх хүсэлт явууллаа. Имэйлээ шалгана уу.',
+          'A new code has been requested. Check your email.',
+        ),
+      );
     } catch (cause) {
       failure(cause);
     } finally {
@@ -163,50 +247,70 @@ function AuthForm() {
   if (!accountApi.configured)
     return (
       <div className="account-unconnected">
-        <div className="account-symbol">
-          <Cloud size={26} />
-        </div>
-        <h3>A little preview of your next chapter.</h3>
-        <p>Explore Oyu AI in the sample workspace. Your edits stay in this browser.</p>
+        <h3 className="account-title">
+          {t('Жишээ орчинд ажиллаж байна', 'You’re using the sample workspace')}
+        </h3>
+        <p className="account-lead">
+          {t(
+            'Oyu AI-г жишээ орчинд туршиж үзээрэй. Таны өөрчлөлт зөвхөн энэ хөтөч дээр хадгалагдана.',
+            'Explore Oyu AI in the sample workspace. Your edits stay in this browser.',
+          )}
+        </p>
         <div className="account-information">
-          <LockKeyhole size={18} />
+          <CloudSlash size={20} />
           <div>
-            <strong>Account connection is not enabled</strong>
+            <strong>
+              {t('Бүртгэлийн холболт идэвхжээгүй байна', 'Account connection isn’t enabled')}
+            </strong>
             <p>
               {accountApi.configurationError ??
-                'This preview needs a configured Oyu AI account service before you can sign in, sync your wardrobe, or request AI analysis.'}
+                t(
+                  'Нэвтрэх, шүүгээгээ ижилтгэх, AI үнэлгээ авахын тулд энэ хувилбарт Oyu AI бүртгэлийн үйлчилгээг тохируулсан байх шаардлагатай.',
+                  'This preview needs a configured Oyu AI account service before you can sign in, sync your wardrobe, or request AI analysis.',
+                )}
             </p>
           </div>
         </div>
         <p className="account-caption">
-          No account has been created. Sample photos and scores are separate from your personal
-          account.
+          {t(
+            'Бүртгэл үүсгээгүй байна. Жишээ зураг, оноо таны хувийн бүртгэлээс тусдаа.',
+            'No account has been created. Sample photos and scores are separate from your personal account.',
+          )}
         </p>
       </div>
     );
   const isCode = mode === 'verify' || mode === 'reset';
   const titles: Record<AuthMode, string> = {
-    login: 'Welcome back.',
-    register: 'Make room for your style.',
-    verify: 'Check your inbox.',
-    forgot: 'Let’s get you back in.',
-    reset: 'A fresh start.',
+    login: t('Дахин тавтай морил', 'Welcome back'),
+    register: t('Бүртгэл үүсгэх', 'Create your account'),
+    verify: t('Имэйлээ шалгана уу', 'Check your email'),
+    forgot: t('Нууц үгээ сэргээх', 'Reset your password'),
+    reset: t('Шинэ нууц үг', 'New password'),
   };
   return (
     <div className="account-auth">
-      <div className="account-symbol">
-        <Sparkles size={25} />
-      </div>
-      <h3>{titles[mode]}</h3>
-      <p className="account-intro">
+      <h3 className="account-title">{titles[mode]}</h3>
+      <p className="account-lead account-intro">
         {isCode
-          ? `Enter the eight-digit code sent to ${email}. ${mode === 'reset' ? 'If an account exists, you’ll receive a recovery email.' : 'It may take a moment to arrive.'}`
+          ? t(
+              `${email} хаяг руу илгээсэн 8 оронтой кодыг оруулна уу. ${mode === 'reset' ? 'Бүртгэл байгаа бол сэргээх имэйл ирнэ.' : 'Ирэхэд хэсэг хугацаа шаардагдаж магадгүй.'}`,
+              `Enter the eight-digit code sent to ${email}. ${mode === 'reset' ? 'If an account exists, you’ll receive a recovery email.' : 'It may take a moment to arrive.'}`,
+            )
           : mode === 'forgot'
-            ? 'Enter your account email and we’ll help you reset your password.'
-            : 'Sign in to your existing Oyu AI account and bring your wardrobe with you.'}
+            ? t(
+                'Бүртгэлтэй имэйлээ оруулна уу. Нууц үгээ шинэчлэх код илгээнэ.',
+                'Enter your account email, and we’ll send you a code to reset your password.',
+              )
+            : t(
+                'Oyu AI бүртгэлээрээ нэвтэрч, шүүгээгээ хаана ч авч яваарай.',
+                'Sign in with your Oyu AI account and take your wardrobe with you anywhere.',
+              )}
       </p>
       {(mode === 'login' || mode === 'register') && (
-        <div className="account-tabs" aria-label="Account access">
+        <div
+          className="segmented account-auth-tabs"
+          aria-label={t('Бүртгэлд нэвтрэх', 'Account access')}
+        >
           <button
             type="button"
             className={mode === 'login' ? 'active' : ''}
@@ -214,7 +318,7 @@ function AuthForm() {
             onClick={() => changeMode('login')}
             disabled={busy}
           >
-            Sign in
+            {t('Нэвтрэх', 'Sign in')}
           </button>
           <button
             type="button"
@@ -223,28 +327,32 @@ function AuthForm() {
             onClick={() => changeMode('register')}
             disabled={busy}
           >
-            Create account
+            {t('Бүртгүүлэх', 'Create account')}
           </button>
         </div>
       )}
       <form className="account-form" onSubmit={submit}>
         {mode === 'register' && (
           <label>
-            Your name <span>(optional)</span>
+            <span className="account-label">
+              {t('Таны нэр', 'Your name')} <span>{t('заавал биш', 'optional')}</span>
+            </span>
             <input
+              className="field"
               value={name}
               onChange={(e) => setName(e.target.value)}
               autoComplete="name"
               maxLength={120}
-              placeholder="How should we call you?"
+              placeholder={t('Таныг хэн гэж дуудах вэ?', 'What should we call you?')}
               disabled={busy}
             />
           </label>
         )}
         {!isCode && (
           <label>
-            Email address
+            {t('Имэйл хаяг', 'Email address')}
             <input
+              className="field"
               type="email"
               autoComplete="email"
               value={email}
@@ -258,9 +366,9 @@ function AuthForm() {
         )}
         {isCode && (
           <label>
-            Verification code
+            {t('Баталгаажуулах код', 'Verification code')}
             <input
-              className="account-code"
+              className="field account-code"
               inputMode="numeric"
               autoComplete="one-time-code"
               value={code}
@@ -275,8 +383,9 @@ function AuthForm() {
         )}
         {['login', 'register', 'reset'].includes(mode) && (
           <label>
-            {mode === 'reset' ? 'New password' : 'Password'}
+            {mode === 'reset' ? t('Шинэ нууц үг', 'New password') : t('Нууц үг', 'Password')}
             <input
+              className="field"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -284,17 +393,24 @@ function AuthForm() {
               required
               disabled={busy}
             />
-            {mode !== 'login' && <span>8–128 characters. Spaces are kept as typed.</span>}
+            {mode !== 'login' && (
+              <span className="account-hint">
+                {t(
+                  '8–128 тэмдэгт. Хоосон зай бичсэнээрээ хадгалагдана.',
+                  '8–128 characters. Spaces are kept as typed.',
+                )}
+              </span>
+            )}
           </label>
         )}
         {mode === 'login' && (
           <button
             type="button"
-            className="account-text-button account-forgot"
+            className="text-link account-link account-forgot"
             onClick={() => changeMode('forgot')}
             disabled={busy}
           >
-            Forgot password?
+            {t('Нууц үгээ мартсан уу?', 'Forgot password?')}
           </button>
         )}
         {error && (
@@ -308,62 +424,77 @@ function AuthForm() {
           </p>
         )}
         {isCode && expiresAt <= now && (
-          <p className="account-caption">This code has expired. Request a new code to continue.</p>
+          <p className="account-caption">
+            {t(
+              'Кодын хугацаа дууссан. Үргэлжлүүлэхийн тулд шинэ код хүснэ үү.',
+              'This code has expired. Request a new code to continue.',
+            )}
+          </p>
         )}
         <button
-          className="account-button account-primary"
+          className="button account-submit"
           disabled={busy || blockedUntil > now || (isCode && expiresAt <= now)}
           type="submit"
           aria-busy={busy}
         >
           {busy ? (
             <>
-              <LoaderCircle className="account-spin" size={18} /> Please wait…
+              <CircleNotch className="account-spin" size={18} />{' '}
+              {t('Түр хүлээнэ үү…', 'Please wait…')}
             </>
           ) : (
             <>
               {
                 {
-                  login: 'Sign in',
-                  register: 'Create account',
-                  verify: 'Verify email',
-                  forgot: 'Send recovery code',
-                  reset: 'Reset password',
+                  login: t('Нэвтрэх', 'Sign in'),
+                  register: t('Бүртгүүлэх', 'Create account'),
+                  verify: t('Имэйл баталгаажуулах', 'Verify email'),
+                  forgot: t('Сэргээх код илгээх', 'Send recovery code'),
+                  reset: t('Нууц үг шинэчлэх', 'Reset password'),
                 }[mode]
               }
-              <ArrowRight size={17} />
+              <ArrowRight size={18} />
             </>
           )}
         </button>
         {isCode && (
           <button
-            className="account-text-button"
+            className="text-link account-link"
             type="button"
             disabled={busy || resendAt > now || blockedUntil > now}
             onClick={resend}
           >
             {resendAt > now
-              ? `Resend code in ${Math.ceil((resendAt - now) / 1000)}s`
-              : 'Send a new code'}
+              ? t(
+                  `${Math.ceil((resendAt - now) / 1000)} секундын дараа дахин илгээх`,
+                  `Resend code in ${Math.ceil((resendAt - now) / 1000)}s`,
+                )
+              : t('Шинэ код илгээх', 'Send a new code')}
           </button>
         )}
         {!['login', 'register'].includes(mode) && (
           <button
             type="button"
-            className="account-text-button"
+            className="text-link account-link"
             onClick={() => {
               changeMode('login');
               setChallenge(null);
             }}
             disabled={busy}
           >
-            <ArrowLeft size={14} /> Back to sign in
+            <ArrowLeft size={14} weight="regular" />{' '}
+            {t('Нэвтрэх хэсэг рүү буцах', 'Back to sign in')}
           </button>
         )}
       </form>
-      <p className="account-caption account-auth-footnote">
-        <LockKeyhole size={13} /> You’ll sign in again after refreshing this page. The sample
-        workspace stays separate.
+      <p className="account-footnote">
+        <LockKey size={16} />
+        <span>
+          {t(
+            'Хуудсыг дахин ачаалсны дараа дахин нэвтрэх шаардлагатай. Жишээ орчин тусдаа хэвээр үлдэнэ.',
+            'You’ll need to sign in again after reloading this page. The sample workspace stays separate.',
+          )}
+        </span>
       </p>
     </div>
   );
@@ -422,9 +553,14 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
   async function signOut() {
     try {
       await accountApi.logout();
-      notify('Signed out of your Oyu AI account.');
+      notify(t('Oyu AI бүртгэлээс гарлаа.', 'Signed out of your Oyu AI account.'));
     } catch {
-      notify('Signed out on this browser. The server could not be reached to revoke the session.');
+      notify(
+        t(
+          'Энэ хөтөч дээр гарлаа. Сервертэй холбогдож чадаагүй тул нэвтрэлтийг цуцалж чадсангүй.',
+          'Signed out on this browser. The server couldn’t be reached to revoke the session.',
+        ),
+      );
     }
   }
   async function loadMore() {
@@ -445,23 +581,31 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
   const entitlement = data.entitlement;
   return (
     <div className="account-connected">
-      <div className="account-identity">
-        <div className="account-avatar">
+      <header className="account-identity">
+        <div className="account-avatar" aria-hidden="true">
           {(data.profile?.profile.display_name || user.email).charAt(0).toUpperCase()}
         </div>
         <div>
-          <h3>{data.profile?.profile.display_name || 'Your personal account'}</h3>
+          <h3>
+            {data.profile?.profile.display_name ||
+              t('Таны хувийн бүртгэл', 'Your personal account')}
+          </h3>
           <p>{user.email}</p>
+          <p className="account-connection-label">
+            <ShieldCheck size={16} />
+            <span>
+              {t(
+                'Холбогдсон бүртгэл · Жишээ орчноос тусдаа',
+                'Connected account · Separate from the sample workspace',
+              )}
+            </span>
+          </p>
         </div>
-        <button className="account-button account-subtle" onClick={signOut}>
-          <LogOut size={15} /> Sign out
+        <button className="button secondary small" onClick={signOut}>
+          <SignOut size={16} /> {t('Гарах', 'Sign out')}
         </button>
-      </div>
-      <div className="account-connection-label">
-        <ShieldCheck size={15} />
-        <span>Connected account · Separate from the sample workspace</span>
-      </div>
-      <nav className="account-tabs" aria-label="Account sections">
+      </header>
+      <nav className="account-nav" aria-label={t('Бүртгэлийн хэсгүүд', 'Account sections')}>
         {(['overview', 'wardrobe', 'looks', 'analysis'] as const).map((value) => (
           <button
             key={value}
@@ -471,10 +615,10 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
           >
             {
               {
-                overview: 'Overview',
-                wardrobe: 'My wardrobe',
-                looks: 'Looks & wear',
-                analysis: 'AI analysis',
+                overview: t('Тойм', 'Overview'),
+                wardrobe: t('Миний шүүгээ', 'My wardrobe'),
+                looks: t('Хослол, өмсөлт', 'Looks & wear'),
+                analysis: t('AI үнэлгээ', 'AI analysis'),
               }[value]
             }
           </button>
@@ -483,47 +627,61 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
       {tab === 'overview' && (
         <div className="account-overview">
           <div className="account-section-heading">
-            <h4>Your account at a glance</h4>
+            <h4>{t('Бүртгэлийн тойм', 'Account overview')}</h4>
             <button
-              className="account-text-button"
+              className="text-link account-link"
               onClick={() => setReload((value) => value + 1)}
               disabled={busy}
             >
-              <RefreshCw size={14} className={busy ? 'account-spin' : ''} /> Refresh
+              <ArrowsClockwise size={15} weight="regular" className={busy ? 'account-spin' : ''} />{' '}
+              {t('Шинэчлэх', 'Refresh')}
             </button>
           </div>
           {busy && (
             <p className="account-caption" role="status">
-              Loading your private account…
+              {t('Хувийн бүртгэлийг ачааллаж байна…', 'Loading your private account…')}
             </p>
           )}
-          <div className="account-stat-grid">
+          <div className="account-stats">
             <div>
-              <span>Account access</span>
+              <span>{t('Бүртгэлийн эрх', 'Account access')}</span>
               <strong>
                 {entitlement
                   ? entitlement.beta_access
-                    ? 'Beta access'
-                    : humanize(entitlement.tier)
+                    ? t('Бета эрх', 'Beta access')
+                    : labelFor(tierLabels, entitlement.tier)
                   : '—'}
               </strong>
               <p>
                 {entitlement
                   ? entitlement.active
-                    ? `${entitlement.daily_ai_jobs} AI jobs per day`
-                    : 'AI access is currently inactive'
-                  : errors.entitlement || 'Loading access…'}
+                    ? t(
+                        `Өдөрт ${entitlement.daily_ai_jobs} AI хүсэлт`,
+                        `${entitlement.daily_ai_jobs} AI ${entitlement.daily_ai_jobs === 1 ? 'request' : 'requests'} per day`,
+                      )
+                    : t('AI эрх одоогоор идэвхгүй', 'AI access is currently inactive')
+                  : errors.entitlement || t('Эрхийг ачааллаж байна…', 'Loading access…')}
               </p>
             </div>
             <div>
-              <span>Style score</span>
+              <span>{t('Стилийн оноо', 'Style score')}</span>
               <strong>
-                {data.summary?.overall == null ? '—' : `${Math.round(data.summary.overall)}/100`}
+                {data.summary?.overall == null ? (
+                  '—'
+                ) : (
+                  <>
+                    {Math.round(data.summary.overall)}
+                    <small>/100</small>
+                  </>
+                )}
               </strong>
               <p>
                 {data.summary
-                  ? `${data.summary.sample_count} eligible ${data.summary.sample_count === 1 ? 'analysis' : 'analyses'}${data.summary.early_estimate && data.summary.overall != null ? ' · Early estimate' : ''}`
-                  : errors.summary || 'Loading scores…'}
+                  ? t(
+                      `Тооцоонд орсон ${data.summary.sample_count} үнэлгээ${data.summary.early_estimate && data.summary.overall != null ? ' · Урьдчилсан тооцоо' : ''}`,
+                      `${data.summary.sample_count} eligible ${data.summary.sample_count === 1 ? 'analysis' : 'analyses'}${data.summary.early_estimate && data.summary.overall != null ? ' · Early estimate' : ''}`,
+                    )
+                  : errors.summary || t('Оноог ачааллаж байна…', 'Loading scores…')}
               </p>
             </div>
           </div>
@@ -531,72 +689,93 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
             <div className="account-detail-list">
               {entitlement.trial_ends_at && entitlement.tier === 'trial' && (
                 <p>
-                  <span>Trial ends</span>
+                  <span>{t('Туршилт дуусах', 'Trial ends')}</span>
                   <strong>{dateLabel(entitlement.trial_ends_at)}</strong>
                 </p>
               )}
               {entitlement.period_end && (
                 <p>
-                  <span>{entitlement.renews ? 'Renews' : 'Access ends'}</span>
+                  <span>
+                    {entitlement.renews ? t('Сунгагдах', 'Renews') : t('Эрх дуусах', 'Access ends')}
+                  </span>
                   <strong>{dateLabel(entitlement.period_end)}</strong>
                 </p>
               )}
               {entitlement.plan && (
                 <p>
-                  <span>Plan</span>
+                  <span>{t('Багц', 'Plan')}</span>
                   <strong>{entitlement.plan}</strong>
                 </p>
               )}
               {entitlement.billing_retry && (
                 <p className="account-error">
-                  Your payment needs attention. Manage it through the store where you subscribed.
+                  {t(
+                    'Төлбөрт анхаарах зүйл гарлаа. Гишүүнчлэл авсан дэлгүүрээрээ дамжуулан шийдвэрлэнэ үү.',
+                    'Your payment needs attention. Manage it through the store where you got your membership.',
+                  )}
                 </p>
               )}
             </div>
           )}
           {data.profile && (
             <div className="account-profile">
-              <h4>Your style preferences</h4>
+              <h4>{t('Таны стилийн сонголт', 'Your style preferences')}</h4>
               <div className="account-tags">
                 {data.profile.preferences.preferred_styles.length ? (
                   data.profile.preferences.preferred_styles.map((style) => (
-                    <span key={style}>{humanize(style)}</span>
+                    <span key={style}>{styleText(style)}</span>
                   ))
                 ) : (
-                  <p className="account-caption">No style preferences recorded yet.</p>
+                  <p className="account-caption">
+                    {t(
+                      'Стилийн сонголт хараахан бүртгэгдээгүй байна.',
+                      'No style preferences recorded yet.',
+                    )}
+                  </p>
                 )}
               </div>
               <p className="account-caption">
                 {data.profile.profile.timezone} ·{' '}
-                {data.profile.profile.locale === 'mn' ? 'Mongolian' : 'English'} ·{' '}
-                {data.profile.profile.unit_system === 'metric' ? 'Metric units' : 'Imperial units'}
+                {data.profile.profile.locale === 'mn'
+                  ? t('Монгол', 'Mongolian')
+                  : t('Англи', 'English')}{' '}
+                ·{' '}
+                {data.profile.profile.unit_system === 'metric'
+                  ? t('Метрийн нэгж', 'Metric units')
+                  : t('Английн нэгж', 'Imperial units')}
               </p>
             </div>
           )}
           {errors.profile && (
             <p className="account-error" role="alert">
-              Profile: {errors.profile}
+              {t('Хувийн мэдээлэл', 'Profile')}: {errors.profile}
             </p>
           )}
-          <p className="account-caption">
-            Subscriptions are managed in the mobile app or the store where you subscribed. Web
-            checkout is not available in this build. Open Live fitting room from the sidebar to try
-            clothes on your camera.
+          <p className="account-caption account-overview-note">
+            {t(
+              'Гишүүнчлэлийг гар утасны апп эсвэл гишүүнчлэл авсан дэлгүүрээс удирдана. Энэ хувилбарт вэбээр төлбөр төлөх боломжгүй. Камераараа хувцас өмсөж үзэхийн тулд хажуугийн цэснээс Шууд өмсөж үзэх өрөөг нээнэ үү.',
+              'Membership is managed in the mobile app or the store where you got it. Web checkout isn’t available in this version. To try clothes on with your camera, open Live try-on from the sidebar.',
+            )}
           </p>
         </div>
       )}
       {tab === 'wardrobe' && (
-        <div>
+        <div className="account-wardrobe-tab">
           <div className="account-section-heading">
             <h4>
-              {data.garments ? `${data.garments.length} items shown` : 'Your private wardrobe'}
+              {data.garments
+                ? t(
+                    `${data.garments.length} хувцас харагдаж байна`,
+                    `${data.garments.length} ${data.garments.length === 1 ? 'piece' : 'pieces'} shown`,
+                  )
+                : t('Таны хувийн шүүгээ', 'Your private wardrobe')}
             </h4>
             <button
-              className="account-text-button"
+              className="text-link account-link"
               onClick={() => setReload((value) => value + 1)}
               disabled={busy}
             >
-              <RefreshCw size={14} /> Refresh
+              <ArrowsClockwise size={15} weight="regular" /> {t('Шинэчлэх', 'Refresh')}
             </button>
           </div>
           {errors.garments && (
@@ -604,7 +783,11 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
               {errors.garments}
             </p>
           )}
-          {!data.garments && busy && <p role="status">Loading wardrobe…</p>}
+          {!data.garments && busy && (
+            <p className="account-caption" role="status">
+              {t('Шүүгээг ачааллаж байна…', 'Loading wardrobe…')}
+            </p>
+          )}
           <ConnectedWardrobe
             garments={data.garments ?? []}
             consent={data.consent}
@@ -628,11 +811,11 @@ function ConnectedAccount({ user }: { user: AuthUser }) {
           />
           {hasMore && (
             <button
-              className="account-button account-subtle"
+              className="button secondary account-more"
               disabled={loadingMore}
               onClick={loadMore}
             >
-              {loadingMore ? 'Loading…' : 'Load more items'}
+              {loadingMore ? t('Ачааллаж байна…', 'Loading…') : t('Цааш нь ачаалах', 'Load more')}
             </button>
           )}
         </div>
@@ -760,7 +943,7 @@ function ConnectedWardrobe({
     }
   }
   async function watchGarment(id: string, jobId: string) {
-    setPhase('Reading your garment');
+    setPhase(t('Хувцсыг таньж байна', 'Identifying your piece'));
     const job = await accountApi.pollJob(jobId, {
       signal: controller.current.signal,
       attempts: 30,
@@ -772,13 +955,19 @@ function ConnectedWardrobe({
     setPending(stillPending);
     if (stillPending)
       setNotice(
-        'Your garment is still processing. Check again in a moment, or refresh your wardrobe later.',
+        t(
+          'Хувцас боловсруулагдсаар байна. Хэсэг хугацааны дараа дахин шалгах эсвэл шүүгээгээ дараа шинэчилнэ үү.',
+          'Your piece is still processing. Check again in a moment, or refresh your wardrobe later.',
+        ),
       );
     else if (job.status === 'failed' || job.status === 'dead') {
       setError(
         job.last_error === 'ai_processing_consent_missing'
           ? apiErrorMessage(new ApiError(job.last_error, ''))
-          : 'This garment could not be processed. You can retry processing from its item card.',
+          : t(
+              'Энэ хувцсыг боловсруулж чадсангүй. Хувцасны карт дээрээс дахин боловсруулж болно.',
+              'This piece couldn’t be processed. You can retry processing from its card.',
+            ),
       );
       setAdding(false);
       setFile(null);
@@ -790,8 +979,11 @@ function ConnectedWardrobe({
       setSelectedId(result.id);
       setNotice(
         result.status === 'pending_confirmation'
-          ? 'Your garment is ready. Review the extracted details before adding it to your active wardrobe.'
-          : 'Your garment has been updated.',
+          ? t(
+              'Хувцас бэлэн боллоо. Шүүгээндээ нэмэхээс өмнө илрүүлсэн мэдээллийг шалгана уу.',
+              'Your piece is ready. Review the detected details before adding it to your wardrobe.',
+            )
+          : t('Хувцас шинэчлэгдлээ.', 'Your piece has been updated.'),
       );
     }
   }
@@ -806,7 +998,13 @@ function ConnectedWardrobe({
         onProgress: setPhase,
       });
       if (!created?.garment)
-        throw new ApiError('invalid_response', 'The account service did not return a garment.');
+        throw new ApiError(
+          'invalid_response',
+          t(
+            'Бүртгэлийн үйлчилгээнээс хувцасны мэдээлэл ирсэнгүй.',
+            'The account service didn’t return the piece’s details.',
+          ),
+        );
       onGarment(created.garment);
       await watchGarment(created.garment.id, created.job.id);
     } catch (cause) {
@@ -827,8 +1025,14 @@ function ConnectedWardrobe({
       else
         setNotice(
           result.status === 'processing'
-            ? 'This garment is still processing. Check again in a moment.'
-            : 'Processing failed. You can retry this garment.',
+            ? t(
+                'Энэ хувцас боловсруулагдсаар байна. Хэсэг хугацааны дараа дахин шалгана уу.',
+                'This piece is still processing. Check again in a moment.',
+              )
+            : t(
+                'Боловсруулалт амжилтгүй боллоо. Энэ хувцсыг дахин боловсруулж болно.',
+                'Processing failed. You can retry this piece.',
+              ),
         );
     } catch (cause) {
       showFailure(cause);
@@ -878,8 +1082,8 @@ function ConnectedWardrobe({
       keys.current.delete(scope);
       setNotice(
         next === 'laundry'
-          ? 'Moved to laundry in your account.'
-          : 'Marked clean and available in your account.',
+          ? t('Угаалгад байгаа гэж тэмдэглэлээ.', 'Moved to the laundry.')
+          : t('Цэвэр, өмсөхөд бэлэн гэж тэмдэглэлээ.', 'Marked clean and ready to wear.'),
       );
     } catch (cause) {
       showFailure(cause);
@@ -902,7 +1106,12 @@ function ConnectedWardrobe({
       keys.current.delete(scope);
       setArchiveId(null);
       setSelectedId(null);
-      setNotice('Garment archived and its private photo deleted from your account.');
+      setNotice(
+        t(
+          'Хувцсыг архивлаж, хувийн зургийг нь бүртгэлээс устгалаа.',
+          'Piece archived and its private photo deleted from your account.',
+        ),
+      );
     } catch (cause) {
       showFailure(cause);
     } finally {
@@ -912,9 +1121,14 @@ function ConnectedWardrobe({
   return (
     <div className="account-wardrobe">
       <div className="account-wardrobe-toolbar">
-        <p className="account-caption">Your private wardrobe, synced with Oyu AI.</p>
+        <p className="account-caption">
+          {t(
+            'Oyu AI-тай ижилтгэсэн таны хувийн шүүгээ.',
+            'Your private wardrobe, synced with Oyu AI.',
+          )}
+        </p>
         <button
-          className="account-button account-primary"
+          className={adding ? 'button secondary small' : 'button small'}
           onClick={() => {
             setAdding((value) => !value);
             setSelectedId(null);
@@ -923,29 +1137,32 @@ function ConnectedWardrobe({
           }}
           disabled={busy}
         >
-          <Plus size={15} />
-          {adding ? 'Close upload' : 'Add garment'}
+          {adding ? <X size={15} weight="regular" /> : <Plus size={15} weight="regular" />}
+          {adding ? t('Хаах', 'Close') : t('Хувцас нэмэх', 'Add a piece')}
         </button>
       </div>
       {adding && (
-        <section className="account-garment-upload">
-          <div className="account-section-heading">
-            <h4>One piece. More possibilities.</h4>
-            <Shirt size={20} />
+        <section className="account-panel account-garment-upload">
+          <div className="account-subheading">
+            <h4>{t('Хувцасны зураг байршуулах', 'Upload a clothing photo')}</h4>
           </div>
           {!allowed ? (
             <div className="account-consent">
-              <ShieldCheck size={22} />
-              <h4>Your photo, your choice.</h4>
+              <div className="account-consent-head">
+                <ShieldCheck size={20} />
+                <h4>{t('AI зураг боловсруулах зөвшөөрөл', 'Consent to AI photo processing')}</h4>
+              </div>
               <p>
-                To identify this garment, Oyu AI uploads your chosen photo to private account
-                storage and sends it to the configured AI vision provider, OpenAI or Anthropic.
-                Camera metadata is removed first. Your name, email, and account ID are not sent with
-                the photo.
+                {t(
+                  'Энэ хувцсыг танихын тулд Oyu AI таны сонгосон зургийг бүртгэлийн хувийн санд байршуулж, тохируулсан AI зураг танилтын үйлчилгээ (OpenAI эсвэл Anthropic) руу илгээнэ. Эхлээд камерын мета өгөгдлийг арилгана. Таны нэр, имэйл, бүртгэлийн ID зурагтай хамт илгээгдэхгүй.',
+                  'To identify this piece, Oyu AI uploads the photo you choose to private account storage and sends it to the configured AI vision service (OpenAI or Anthropic). Camera metadata is removed first. Your name, email, and account ID aren’t sent with the photo.',
+                )}
               </p>
               <p>
-                This account-wide choice covers garment and outfit photos. You can turn it off from
-                the AI analysis tab; it does not undo completed processing.
+                {t(
+                  'Энэ сонголт бүртгэлийн хэмжээнд хамаарах бөгөөд хувцас болон хослолын зургийг хамарна. AI үнэлгээ хэсгээс унтрааж болно; аль хэдийн хийгдсэн боловсруулалтыг буцаахгүй.',
+                  'This account-wide choice covers both clothing and outfit photos. You can turn it off from the AI analysis tab; it doesn’t undo processing that’s already done.',
+                )}
               </p>
               <label className="account-check">
                 <input
@@ -954,41 +1171,69 @@ function ConnectedWardrobe({
                   onChange={(event) => setAgreed(event.target.checked)}
                   disabled={busy || !consent}
                 />
-                <span>I agree to AI processing of the photos I choose to submit.</span>
+                <span>
+                  {t(
+                    'Миний илгээхээр сонгосон зургийг AI-аар боловсруулахыг зөвшөөрч байна.',
+                    'I agree to AI processing of the photos I choose to submit.',
+                  )}
+                </span>
               </label>
               <button
-                className="account-button account-primary"
+                className="button"
                 onClick={grantConsent}
                 disabled={!agreed || busy || !consent}
               >
-                Allow AI photo processing
+                {t('AI зураг боловсруулалтыг зөвшөөрөх', 'Allow AI photo processing')}
               </button>
               {!consent && (
-                <p className="account-caption">{consentError || 'Checking your privacy choice…'}</p>
+                <p className="account-caption">
+                  {consentError ||
+                    t('Нууцлалын сонголтыг шалгаж байна…', 'Checking your privacy choice…')}
+                </p>
               )}
             </div>
           ) : (
             <>
               <p className="account-caption">
-                Photograph one garment clearly, then review the details Oyu AI finds. AI photo
-                processing is allowed for your account.
+                {t(
+                  'Нэг хувцсыг тод зураад Oyu AI-ийн илрүүлсэн мэдээллийг шалгана уу. Таны бүртгэлд AI зураг боловсруулалт зөвшөөрөгдсөн.',
+                  'Photograph one piece clearly, then review the details Oyu AI finds. AI photo processing is allowed for your account.',
+                )}
               </p>
               {entitlement?.active === false && (
                 <p className="account-error">
-                  Your account needs active AI access to process garment photos.
+                  {t(
+                    'Хувцасны зураг боловсруулахад идэвхтэй AI эрх шаардлагатай.',
+                    'Your account needs active AI access to process clothing photos.',
+                  )}
                 </p>
               )}
               <label className={`account-photo-picker ${busy ? 'disabled' : ''}`}>
                 {preview ? (
-                  <img src={preview} alt="Garment selected for private account upload" />
+                  <img
+                    src={preview}
+                    alt={t(
+                      'Хувийн бүртгэлд байршуулахаар сонгосон хувцас',
+                      'Piece selected for private account upload',
+                    )}
+                  />
                 ) : (
-                  <ImagePlus size={28} />
+                  <span className="account-picker-icon" aria-hidden="true">
+                    <ImageSquare size={20} />
+                  </span>
                 )}
-                <strong>{file?.name || 'Choose a garment photo'}</strong>
-                <span>JPEG, PNG or WebP · Up to 15 MB</span>
+                <strong>
+                  {file?.name || t('Хувцасны зураг сонгох', 'Choose a clothing photo')}
+                </strong>
+                <span>
+                  {t('JPEG, PNG эсвэл WebP · 15 MB хүртэл', 'JPEG, PNG, or WebP · Up to 15 MB')}
+                </span>
                 <input
                   type="file"
-                  aria-label="Choose garment photo for account wardrobe"
+                  aria-label={t(
+                    'Бүртгэлийн шүүгээнд нэмэх хувцасны зураг сонгох',
+                    'Choose a clothing photo for your account wardrobe',
+                  )}
                   accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
                   onChange={(event) => {
                     chooseFile(event.target.files?.[0]);
@@ -998,28 +1243,30 @@ function ConnectedWardrobe({
                 />
               </label>
               <button
-                className="account-button account-primary full-width"
+                className="button full-width"
                 onClick={upload}
                 disabled={!file || busy || entitlement?.active === false}
               >
                 {busy ? (
                   <>
-                    <LoaderCircle size={16} className="account-spin" />
-                    {phase || 'Working…'}
+                    <CircleNotch size={18} className="account-spin" />
+                    {phase || t('Боловсруулж байна…', 'Processing…')}
                   </>
                 ) : pending ? (
-                  'Check garment processing'
+                  t('Боловсруулалтыг шалгах', 'Check processing')
                 ) : (
                   <>
-                    <Sparkles size={16} />
-                    Upload and identify garment
+                    <Scan size={18} />
+                    {t('Байршуулж, хувцсыг таних', 'Upload and identify piece')}
                   </>
                 )}
               </button>
               {busy && (
                 <p className="account-caption" role="status">
-                  Closing this panel stops waiting. A submitted garment continues processing in your
-                  account.
+                  {t(
+                    'Энэ хэсгийг хаавал хүлээлт зогсоно. Илгээсэн хувцас бүртгэлд тань боловсруулагдсаар байна.',
+                    'Closing this panel stops waiting. A submitted piece keeps processing in your account.',
+                  )}
                 </p>
               )}
             </>
@@ -1039,21 +1286,29 @@ function ConnectedWardrobe({
       <div ref={revealedPanel}>
         {archiveItem && (
           <section className="account-archive-confirm" aria-labelledby="archive-garment-title">
-            <h4 id="archive-garment-title">Archive {archiveItem.name || 'this garment'}?</h4>
+            <h4 id="archive-garment-title">
+              {archiveItem.name
+                ? t(`“${archiveItem.name}” хувцсыг архивлах уу?`, `Archive “${archiveItem.name}”?`)
+                : t('Энэ хувцсыг архивлах уу?', 'Archive this piece?')}
+            </h4>
             <p>
-              This removes it from your wardrobe and permanently deletes its private photo. Saved
-              looks using this piece may become unavailable. This cannot be undone here.
+              {t(
+                'Хувцсыг шүүгээнээс хасаж, хувийн зургийг нь бүрмөсөн устгана. Энэ хувцсыг ашигласан хадгалсан хослол боломжгүй болж магадгүй. Энэ үйлдлийг эндээс буцаах боломжгүй.',
+                'This removes the piece from your wardrobe and permanently deletes its private photo. Saved looks that use this piece may become unavailable. This can’t be undone here.',
+              )}
             </p>
             <div className="account-action-row">
               <button
-                className="account-button account-subtle"
+                className="button secondary small"
                 onClick={() => setArchiveId(null)}
                 disabled={busy}
               >
-                Keep garment
+                {t('Хувцсыг үлдээх', 'Keep piece')}
               </button>
-              <button className="account-button account-danger" onClick={archive} disabled={busy}>
-                {busy ? 'Archiving…' : 'Archive and delete photo'}
+              <button className="button danger small" onClick={archive} disabled={busy}>
+                {busy
+                  ? t('Архивлаж байна…', 'Archiving…')
+                  : t('Архивлаж, зургийг устгах', 'Archive and delete photo')}
               </button>
             </div>
           </section>
@@ -1065,7 +1320,12 @@ function ConnectedWardrobe({
             onSaved={(garment) => {
               onGarment(garment);
               setSelectedId(null);
-              setNotice('Garment confirmed and active in your account.');
+              setNotice(
+                t(
+                  'Хувцас баталгаажиж, шүүгээнд тань идэвхжлээ.',
+                  'Piece confirmed and active in your wardrobe.',
+                ),
+              );
             }}
             onClose={() => setSelectedId(null)}
           />
@@ -1073,87 +1333,101 @@ function ConnectedWardrobe({
       </div>
       {!selected && garments.length === 0 && !adding && (
         <div className="account-empty">
-          <Shirt size={30} />
-          <h4>Make room for your first piece.</h4>
+          <TShirt size={28} />
+          <h4>{t('Анхны хувцсаа нэмээрэй', 'Add your first piece')}</h4>
           <p>
-            Add a garment photo to start your own wardrobe. Review every detail before it becomes
-            active.
+            {t(
+              'Хувцасны зураг нэмж өөрийн шүүгээгээ эхлүүлээрэй. Идэвхжүүлэхээс өмнө мэдээлэл бүрийг шалгах боломжтой.',
+              'Add a clothing photo to start your own wardrobe. You can review every detail before it becomes active.',
+            )}
           </p>
         </div>
       )}
       <div className="account-garment-grid">
         {garments.map((garment) => (
-          <article className="account-garment account-garment-manage" key={garment.id}>
-            <div className="account-garment-top">
-              <PrivateGarmentImage garment={garment} />
-              <div>
-                <h4>{garment.name || 'Untitled garment'}</h4>
-                <p>
-                  {[garment.primary_color, garment.category].filter(Boolean).join(' · ') ||
-                    'Reading garment details'}
-                </p>
-                <span className={`account-status ${garment.status === 'active' ? 'ready' : ''}`}>
-                  {garment.status === 'active'
-                    ? humanize(garment.availability)
-                    : humanize(garment.status)}
-                </span>
-              </div>
-            </div>
-            <div className="account-garment-actions">
-              {(garment.status === 'active' || garment.status === 'pending_confirmation') && (
+          <article
+            className={`account-garment ${garment.id === selectedId || garment.id === archiveId ? 'selected' : ''}`}
+            key={garment.id}
+          >
+            <PrivateGarmentImage garment={garment} />
+            <div className="account-garment-body">
+              <h4>{garment.name || t('Нэргүй хувцас', 'Untitled piece')}</h4>
+              <p>
+                {[
+                  garment.primary_color && colorText(garment.primary_color),
+                  garment.category && categoryText(garment.category),
+                ]
+                  .filter(Boolean)
+                  .join(' · ') || t('Хувцасны мэдээллийг уншиж байна', 'Reading piece details')}
+              </p>
+              <span
+                className={`account-status ${garment.status === 'active' ? 'ready' : garment.status === 'failed' ? 'failed' : ''}`}
+              >
+                {garment.status === 'active'
+                  ? labelFor(availabilityLabels, garment.availability)
+                  : labelFor(garmentStatusLabels, garment.status)}
+              </span>
+              <div className="account-garment-actions">
+                {(garment.status === 'active' || garment.status === 'pending_confirmation') && (
+                  <button
+                    className="text-link account-link"
+                    onClick={() => {
+                      setSelectedId(garment.id);
+                      setArchiveId(null);
+                      setAdding(false);
+                      setError('');
+                    }}
+                    disabled={busy}
+                  >
+                    {garment.status === 'pending_confirmation'
+                      ? t('Шалгаж баталгаажуулах', 'Review and confirm')
+                      : t('Дэлгэрэнгүй', 'Details')}
+                  </button>
+                )}
+                {garment.status === 'active' && (
+                  <button
+                    className="text-link account-link"
+                    onClick={() => availability(garment)}
+                    disabled={busy}
+                  >
+                    {garment.availability === 'laundry'
+                      ? t('Цэвэр гэж тэмдэглэх', 'Mark clean')
+                      : t('Угаалгад хийх', 'Move to the laundry')}
+                  </button>
+                )}
+                {garment.status === 'processing' && (
+                  <button
+                    className="text-link account-link"
+                    onClick={() => refreshGarment(garment.id)}
+                    disabled={busy}
+                  >
+                    {t('Боловсруулалтыг шалгах', 'Check processing')}
+                  </button>
+                )}
+                {garment.status === 'failed' && (
+                  <button
+                    className="text-link account-link"
+                    onClick={() => retry(garment)}
+                    disabled={busy || entitlement?.active === false}
+                  >
+                    {t('Дахин боловсруулах', 'Retry processing')}
+                  </button>
+                )}
                 <button
-                  className="account-text-button"
+                  className="text-link account-link"
+                  aria-label={t(
+                    `Архивлах: ${garment.name || 'хувцас'}`,
+                    `Archive ${garment.name || 'piece'}`,
+                  )}
                   onClick={() => {
-                    setSelectedId(garment.id);
-                    setArchiveId(null);
-                    setAdding(false);
-                    setError('');
+                    setArchiveId(garment.id);
+                    setSelectedId(null);
                   }}
                   disabled={busy}
                 >
-                  {garment.status === 'pending_confirmation'
-                    ? 'Review and confirm'
-                    : 'View details'}
+                  <Archive size={15} weight="regular" /> {t('Архивлах', 'Archive')}
                 </button>
-              )}
-              {garment.status === 'active' && (
-                <button
-                  className="account-text-button"
-                  onClick={() => availability(garment)}
-                  disabled={busy}
-                >
-                  {garment.availability === 'laundry' ? 'Mark clean' : 'Move to laundry'}
-                </button>
-              )}
-              {garment.status === 'processing' && (
-                <button
-                  className="account-text-button"
-                  onClick={() => refreshGarment(garment.id)}
-                  disabled={busy}
-                >
-                  Check processing
-                </button>
-              )}
-              {garment.status === 'failed' && (
-                <button
-                  className="account-text-button"
-                  onClick={() => retry(garment)}
-                  disabled={busy || entitlement?.active === false}
-                >
-                  Retry processing
-                </button>
-              )}
-              <button
-                className="account-text-button"
-                aria-label={`Archive ${garment.name || 'garment'}`}
-                onClick={() => {
-                  setArchiveId(garment.id);
-                  setSelectedId(null);
-                }}
-                disabled={busy}
-              >
-                <Archive size={13} /> Archive
-              </button>
+              </div>
             </div>
           </article>
         ))}
@@ -1178,16 +1452,16 @@ function PrivateGarmentImage({ garment }: { garment: ApiGarment }) {
     return () => controller.abort();
   }, [garment.id, garment.media_id, garment.status]);
   return (
-    <div className="account-garment-icon">
+    <div className="account-garment-thumb">
       {url ? (
         <img
           src={url}
-          alt={garment.name || 'Private garment'}
+          alt={garment.name || t('Хувийн хувцас', 'Private piece')}
           referrerPolicy="no-referrer"
           onError={() => setUrl('')}
         />
       ) : (
-        <Shirt size={25} />
+        <TShirt size={22} />
       )}
     </div>
   );
@@ -1220,7 +1494,12 @@ function GarmentReview({
     event.preventDefault();
     setError('');
     if (!category) {
-      setError('Choose a category before confirming this garment.');
+      setError(
+        t(
+          'Баталгаажуулахаас өмнө ангилал сонгоно уу.',
+          'Choose a category before confirming this piece.',
+        ),
+      );
       return;
     }
     setBusy(true);
@@ -1248,45 +1527,72 @@ function GarmentReview({
     }
   }
   const retained: [string, string][] = [
-    ['Subcategory', garment.subcategory || 'Not specified'],
-    ['Layer', garment.layer_position || 'base'],
-    ['Material', garment.material || 'Not specified'],
-    ['Pattern', garment.pattern ?? 'solid'],
-    ['Secondary colors', garment.secondary_colors?.join(', ') || 'None'],
     [
-      'Seasons',
-      garment.seasons?.length ? garment.seasons.join(', ') : 'spring, summer, autumn, winter',
+      t('Дэд ангилал', 'Subcategory'),
+      garment.subcategory ? humanize(garment.subcategory) : t('Тодорхойгүй', 'Not specified'),
+    ],
+    [t('Давхарга', 'Layer'), labelFor(layerLabels, garment.layer_position || 'base')],
+    [t('Материал', 'Material'), garment.material || t('Тодорхойгүй', 'Not specified')],
+    [t('Хээ', 'Pattern'), labelFor(patternLabels, garment.pattern ?? 'solid')],
+    [
+      t('Нэмэлт өнгө', 'Secondary colors'),
+      garment.secondary_colors?.map(colorText).join(', ') || t('Байхгүй', 'None'),
     ],
     [
-      'Temperature range',
+      t('Улирал', 'Seasons'),
+      garment.seasons?.length
+        ? garment.seasons.map((season) => labelFor(seasonLabels, season).toLowerCase()).join(', ')
+        : t('хавар, зун, намар, өвөл', 'spring, summer, fall, winter'),
+    ],
+    [
+      t('Температурын хүрээ', 'Temperature range'),
       garment.min_temp_c == null && garment.max_temp_c == null
-        ? 'Not specified'
-        : `${garment.min_temp_c ?? '—'}°C to ${garment.max_temp_c ?? '—'}°C`,
+        ? t('Тодорхойгүй', 'Not specified')
+        : `${garment.min_temp_c ?? '—'}°C – ${garment.max_temp_c ?? '—'}°C`,
     ],
-    ['Occasions', garment.occasions?.join(', ') || 'Not specified'],
-    ['Style tags', garment.style_tags?.join(', ') || 'Not specified'],
-    ['Brand', garment.brand || 'Not specified'],
-    ['Description', garment.description || 'Not specified'],
+    [
+      t('Өмсөх үе', 'Occasions'),
+      garment.occasions?.join(', ') || t('Тодорхойгүй', 'Not specified'),
+    ],
+    [
+      t('Стилийн шошго', 'Style tags'),
+      garment.style_tags?.join(', ') || t('Тодорхойгүй', 'Not specified'),
+    ],
+    [t('Брэнд', 'Brand'), garment.brand || t('Тодорхойгүй', 'Not specified')],
+    [t('Тайлбар', 'Description'), garment.description || t('Тодорхойгүй', 'Not specified')],
   ];
   if (garment.status !== 'pending_confirmation')
     return (
-      <section className="account-garment-review">
-        <div className="account-section-heading">
-          <h4>{garment.name || 'Garment details'}</h4>
-          <button className="account-text-button" onClick={onClose}>
-            Close details
+      <section className="account-panel account-garment-review">
+        <div className="account-subheading">
+          <h4>{garment.name || t('Хувцасны дэлгэрэнгүй', 'Piece details')}</h4>
+          <button className="text-link account-link" onClick={onClose}>
+            {t('Дэлгэрэнгүйг хаах', 'Close details')}
           </button>
         </div>
         <p className="account-caption">
-          This garment is confirmed. Change its availability or archive it from its card.
+          {t(
+            'Энэ хувцас баталгаажсан. Төлөвийг нь өөрчлөх эсвэл архивлахыг картаас нь хийнэ үү.',
+            'This piece is confirmed. Change its availability or archive it from its card.',
+          )}
         </p>
         <div className="account-retained-details">
           <dl>
             {[
-              ['Category', garment.category || 'Not specified'],
-              ['Primary color', garment.primary_color || 'Not specified'],
-              ['Warmth', String(garment.warmth_level)],
-              ['Formality', String(garment.formality)],
+              [
+                t('Ангилал', 'Category'),
+                garment.category
+                  ? categoryText(garment.category)
+                  : t('Тодорхойгүй', 'Not specified'),
+              ],
+              [
+                t('Үндсэн өнгө', 'Primary color'),
+                garment.primary_color
+                  ? colorText(garment.primary_color)
+                  : t('Тодорхойгүй', 'Not specified'),
+              ],
+              [t('Дулаан', 'Warmth'), String(garment.warmth_level)],
+              [t('Албан ёсны түвшин', 'Formality'), String(garment.formality)],
               ...retained,
             ].map(([label, value]) => (
               <div key={label}>
@@ -1299,23 +1605,33 @@ function GarmentReview({
       </section>
     );
   return (
-    <section className="account-garment-review">
-      <div className="account-section-heading">
-        <h4>Review your garment</h4>
-        <button className="account-text-button" onClick={onClose} disabled={busy}>
-          Close review
+    <section className="account-panel account-garment-review">
+      <div className="account-subheading">
+        <h4>{t('Хувцсаа шалгах', 'Review your piece')}</h4>
+        <button className="text-link account-link" onClick={onClose} disabled={busy}>
+          {t('Хаах', 'Close')}
         </button>
       </div>
       <p className="account-caption">
         {garment.needs_review
-          ? 'The image reader was uncertain. Please check these details carefully.'
-          : 'Check the extracted details and make them your own.'}{' '}
-        Confirming makes this piece available to your wardrobe.
+          ? t(
+              'Зураг танигч эргэлзээтэй үр дүн гаргасан. Мэдээллийг анхааралтай шалгана уу.',
+              'The image reader was uncertain. Please check these details carefully.',
+            )
+          : t(
+              'Илрүүлсэн мэдээллийг шалгаж, өөрийнхөөрөө засаарай.',
+              'Check the detected details and make them your own.',
+            )}{' '}
+        {t(
+          'Баталгаажуулснаар энэ хувцас шүүгээнд тань нэмэгдэнэ.',
+          'Confirming adds this piece to your wardrobe.',
+        )}
       </p>
       <form className="account-form" onSubmit={submit}>
         <label>
-          Garment name
+          {t('Хувцасны нэр', 'Piece name')}
           <input
+            className="field"
             value={name}
             maxLength={160}
             onChange={(event) => setName(event.target.value)}
@@ -1324,14 +1640,15 @@ function GarmentReview({
         </label>
         <div className="account-review-fields">
           <label>
-            Category
+            {t('Ангилал', 'Category')}
             <select
+              className="field account-select"
               value={category}
               onChange={(event) => setCategory(event.target.value as GarmentCategory)}
               required
               disabled={busy}
             >
-              <option value="">Choose a category</option>
+              <option value="">{t('Ангилал сонгох', 'Choose a category')}</option>
               {(
                 [
                   'top',
@@ -1344,14 +1661,15 @@ function GarmentReview({
                 ] as const
               ).map((value) => (
                 <option value={value} key={value}>
-                  {humanize(value)}
+                  {categoryText(value)}
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Primary color
+            {t('Үндсэн өнгө', 'Primary color')}
             <input
+              className="field"
               value={color}
               maxLength={80}
               onChange={(event) => setColor(event.target.value)}
@@ -1361,22 +1679,33 @@ function GarmentReview({
         </div>
         <div className="account-review-fields">
           <label>
-            Warmth
+            {t('Дулаан', 'Warmth')}
             <select
+              className="field account-select"
               value={warmth}
               onChange={(event) => setWarmth(Number(event.target.value))}
               disabled={busy}
             >
               {[1, 2, 3, 4, 5].map((value) => (
                 <option value={value} key={value}>
-                  {value} · {['Very light', 'Light', 'Medium', 'Warm', 'Very warm'][value - 1]}
+                  {value} ·{' '}
+                  {
+                    [
+                      t('Маш нимгэн', 'Very light'),
+                      t('Нимгэн', 'Light'),
+                      t('Дунд зэрэг', 'Medium'),
+                      t('Дулаан', 'Warm'),
+                      t('Маш дулаан', 'Very warm'),
+                    ][value - 1]
+                  }
                 </option>
               ))}
             </select>
           </label>
           <label>
-            Formality
+            {t('Албан ёсны түвшин', 'Formality')}
             <select
+              className="field account-select"
               value={formality}
               onChange={(event) => setFormality(Number(event.target.value))}
               disabled={busy}
@@ -1384,14 +1713,27 @@ function GarmentReview({
               {[1, 2, 3, 4, 5].map((value) => (
                 <option value={value} key={value}>
                   {value} ·{' '}
-                  {['Very casual', 'Casual', 'Smart casual', 'Formal', 'Very formal'][value - 1]}
+                  {
+                    [
+                      t('Маш чөлөөт', 'Very casual'),
+                      t('Чөлөөт', 'Casual'),
+                      t('Хагас албан', 'Smart casual'),
+                      t('Албан', 'Formal'),
+                      t('Маш албан', 'Very formal'),
+                    ][value - 1]
+                  }
                 </option>
               ))}
             </select>
           </label>
         </div>
         <details className="account-retained-details">
-          <summary>Other extracted details · kept when you save</summary>
+          <summary>
+            {t(
+              'Бусад илрүүлсэн мэдээлэл · хадгалахад хэвээр үлдэнэ',
+              'Other detected details · kept when you save',
+            )}
+          </summary>
           <dl>
             {retained.map(([label, value]) => (
               <div key={label}>
@@ -1406,16 +1748,12 @@ function GarmentReview({
             {error}
           </p>
         )}
-        <button
-          className="account-button account-primary"
-          type="submit"
-          disabled={busy || !category}
-        >
+        <button className="button" type="submit" disabled={busy || !category}>
           {busy
-            ? 'Saving…'
+            ? t('Хадгалж байна…', 'Saving…')
             : garment.status === 'pending_confirmation'
-              ? 'Confirm and add to wardrobe'
-              : 'Save garment details'}
+              ? t('Баталгаажуулж, шүүгээнд нэмэх', 'Confirm and add to wardrobe')
+              : t('Хувцасны мэдээллийг хадгалах', 'Save piece details')}
         </button>
       </form>
     </section>
@@ -1529,9 +1867,15 @@ function AnalysisPanel({
         onProgress: setPhase,
       });
       if (!created?.score)
-        throw new ApiError('invalid_response', 'The account service did not return an analysis.');
+        throw new ApiError(
+          'invalid_response',
+          t(
+            'Бүртгэлийн үйлчилгээнээс үнэлгээ ирсэнгүй.',
+            'The account service didn’t return an analysis.',
+          ),
+        );
       setScore(created.score);
-      setPhase('Analyzing your outfit');
+      setPhase(t('Хослолыг тань үнэлж байна', 'Analyzing your outfit'));
       const job = await accountApi.pollJob(created.job.id, {
         signal: controller.current.signal,
         attempts: 30,
@@ -1548,7 +1892,10 @@ function AnalysisPanel({
         setError(
           reason === 'ai_processing_consent_missing'
             ? apiErrorMessage(new ApiError(reason, ''))
-            : 'This photo could not be analyzed. You can choose another photo and try again.',
+            : t(
+                'Энэ зургийг үнэлж чадсангүй. Өөр зураг сонгоод дахин оролдоно уу.',
+                'This photo couldn’t be analyzed. Choose another photo and try again.',
+              ),
         );
       }
     } catch (cause) {
@@ -1563,25 +1910,32 @@ function AnalysisPanel({
     <div className="account-analysis">
       <div className="account-section-heading">
         <div>
-          <h4>A fresh perspective on your outfit.</h4>
+          <h4>{t('Хослолын үнэлгээ', 'Outfit analysis')}</h4>
           <p className="account-caption">
-            Upload a photo for analysis from your connected Oyu AI service.
+            {t(
+              'Холбогдсон Oyu AI үйлчилгээгээр үнэлүүлэх зургаа оруулна уу.',
+              'Upload a photo for analysis from your connected Oyu AI service.',
+            )}
           </p>
         </div>
-        <Sparkles size={21} />
       </div>
       {!allowed && (
         <div className="account-consent">
-          <ShieldCheck size={22} />
-          <h4>You choose what to share.</h4>
+          <div className="account-consent-head">
+            <ShieldCheck size={20} />
+            <h4>{t('AI зураг боловсруулах зөвшөөрөл', 'Consent to AI photo processing')}</h4>
+          </div>
           <p>
-            When you request an analysis, your photo is uploaded to private account storage and sent
-            to the configured AI vision provider, OpenAI or Anthropic. Camera metadata is removed
-            before processing. Your name, email, and account ID are not sent with the photo.
+            {t(
+              'Үнэлгээ хүсэхэд таны зураг бүртгэлийн хувийн санд байршиж, тохируулсан AI зураг танилтын үйлчилгээ (OpenAI эсвэл Anthropic) руу илгээгдэнэ. Боловсруулахаас өмнө камерын мета өгөгдлийг арилгана. Таны нэр, имэйл, бүртгэлийн ID зурагтай хамт илгээгдэхгүй.',
+              'When you request an analysis, your photo is uploaded to private account storage and sent to the configured AI vision service (OpenAI or Anthropic). Camera metadata is removed before processing. Your name, email, and account ID aren’t sent with the photo.',
+            )}
           </p>
           <p>
-            This account-wide choice also covers garment photo processing in Oyu AI. You can turn it
-            off here. It does not undo processing already completed.
+            {t(
+              'Энэ сонголт бүртгэлийн хэмжээнд хамаарах бөгөөд Oyu AI дахь хувцасны зураг боловсруулалтыг мөн хамарна. Эндээс унтрааж болно. Аль хэдийн хийгдсэн боловсруулалтыг буцаахгүй.',
+              'This account-wide choice also covers clothing photo processing in Oyu AI. You can turn it off here. It doesn’t undo processing that’s already done.',
+            )}
           </p>
           <label className="account-check">
             <input
@@ -1590,17 +1944,27 @@ function AnalysisPanel({
               onChange={(e) => setAgreed(e.target.checked)}
               disabled={busy || !consent}
             />
-            <span>I agree to AI processing of the photos I choose to submit.</span>
+            <span>
+              {t(
+                'Миний илгээхээр сонгосон зургийг AI-аар боловсруулахыг зөвшөөрч байна.',
+                'I agree to AI processing of the photos I choose to submit.',
+              )}
+            </span>
           </label>
           <button
-            className="account-button account-primary"
+            className="button"
             onClick={() => changeConsent(true)}
             disabled={!agreed || busy || !consent}
           >
-            {busy ? 'Saving…' : 'Allow AI photo processing'}
+            {busy
+              ? t('Хадгалж байна…', 'Saving…')
+              : t('AI зураг боловсруулалтыг зөвшөөрөх', 'Allow AI photo processing')}
           </button>
           {!consent && (
-            <p className="account-caption">{consentError || 'Checking your privacy choice…'}</p>
+            <p className="account-caption">
+              {consentError ||
+                t('Нууцлалын сонголтыг шалгаж байна…', 'Checking your privacy choice…')}
+            </p>
           )}
         </div>
       )}
@@ -1608,33 +1972,51 @@ function AnalysisPanel({
         <>
           <div className="account-consent-active">
             <span>
-              <CheckCircle2 size={15} /> AI photo processing is allowed
+              <CheckCircle size={16} />{' '}
+              {t('AI зураг боловсруулалт зөвшөөрөгдсөн', 'AI photo processing is allowed')}
             </span>
             <button
-              className="account-text-button"
+              className="text-link account-link"
               onClick={() => changeConsent(false)}
               disabled={busy}
             >
-              Turn off
+              {t('Унтраах', 'Turn off')}
             </button>
           </div>
           {entitlement && !entitlement.active && (
             <p className="account-error">
-              Your account does not currently include AI access. Manage your subscription in the
-              mobile app to continue.
+              {t(
+                'Таны бүртгэлд одоогоор AI ашиглах эрх алга. Үргэлжлүүлэхийн тулд гишүүнчлэлээ гар утасны аппаас удирдана уу.',
+                'Your account doesn’t currently include AI access. To continue, manage your membership in the mobile app.',
+              )}
             </p>
           )}
           <label className={`account-photo-picker ${busy ? 'disabled' : ''}`}>
             {preview ? (
-              <img src={preview} alt="Your selected outfit, ready for analysis" />
+              <img
+                src={preview}
+                alt={t(
+                  'Үнэлгээнд бэлэн, таны сонгосон хослол',
+                  'Your selected outfit, ready for analysis',
+                )}
+              />
             ) : (
-              <ImagePlus size={30} />
+              <span className="account-picker-icon" aria-hidden="true">
+                <ImageSquare size={20} />
+              </span>
             )}
-            <strong>{file ? file.name : 'Choose an outfit photo'}</strong>
-            <span>JPEG, PNG or WebP · Up to 15 MB</span>
+            <strong>
+              {file ? file.name : t('Хослолын зураг сонгох', 'Choose an outfit photo')}
+            </strong>
+            <span>
+              {t('JPEG, PNG эсвэл WebP · 15 MB хүртэл', 'JPEG, PNG, or WebP · Up to 15 MB')}
+            </span>
             <input
               type="file"
-              aria-label="Choose outfit photo for account analysis"
+              aria-label={t(
+                'Бүртгэлийн үнэлгээнд зориулж хослолын зураг сонгох',
+                'Choose an outfit photo for account analysis',
+              )}
               accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
               onChange={(e) => {
                 chooseFile(e.target.files?.[0]);
@@ -1644,7 +2026,7 @@ function AnalysisPanel({
             />
           </label>
           <button
-            className="account-button account-primary"
+            className="button full-width"
             disabled={
               !file ||
               busy ||
@@ -1658,28 +2040,33 @@ function AnalysisPanel({
           >
             {busy ? (
               <>
-                <LoaderCircle size={17} className="account-spin" />
-                {phase || 'Working…'}
+                <CircleNotch size={18} className="account-spin" />
+                {phase || t('Боловсруулж байна…', 'Processing…')}
               </>
             ) : jobPending ? (
               <>
-                <RefreshCw size={16} /> Check analysis
+                <ArrowsClockwise size={18} /> {t('Үнэлгээг шалгах', 'Check analysis')}
               </>
             ) : (
               <>
-                <Sparkles size={17} /> Analyze this outfit
+                <Scan size={18} /> {t('Энэ хослолыг үнэлэх', 'Analyze this outfit')}
               </>
             )}
           </button>
           {busy && (
             <p className="account-caption" role="status">
-              Your analysis may take a moment. Closing this panel stops waiting; a submitted job
-              continues in your account.
+              {t(
+                'Үнэлгээ хэсэг хугацаа шаардаж магадгүй. Энэ хэсгийг хаавал хүлээлт зогсох ч илгээсэн хүсэлт бүртгэлд тань үргэлжилнэ.',
+                'Your analysis may take a moment. Closing this panel stops waiting, but a submitted request continues in your account.',
+              )}
             </p>
           )}
           {jobPending && !busy && (
             <p className="account-caption" role="status">
-              Your analysis is still processing. Check again in a moment. No score is available yet.
+              {t(
+                'Үнэлгээ боловсруулагдсаар байна. Хэсэг хугацааны дараа дахин шалгана уу. Оноо хараахан гараагүй байна.',
+                'Your analysis is still processing. Check again in a moment. No score is available yet.',
+              )}
             </p>
           )}
         </>
@@ -1692,21 +2079,23 @@ function AnalysisPanel({
       {score && <ScoreCard score={score} />}
       {score?.status === 'analyzing' && (
         <button
-          className="account-button account-subtle"
+          className="button secondary small"
           disabled={busy || loadingScore}
           onClick={() => refreshScore(score.id)}
         >
-          <RefreshCw size={15} />
-          {loadingScore ? 'Checking…' : 'Refresh analysis'}
+          <ArrowsClockwise size={15} weight="regular" />
+          {loadingScore
+            ? t('Шалгаж байна…', 'Checking…')
+            : t('Үнэлгээг шинэчлэх', 'Refresh analysis')}
         </button>
       )}
       {loadingScore && (
         <p className="account-caption" role="status">
-          Loading the latest analysis…
+          {t('Сүүлийн үнэлгээг ачааллаж байна…', 'Loading the latest analysis…')}
         </p>
       )}
       <div className="account-recent">
-        <h4>Recent account analyses</h4>
+        <h4>{t('Сүүлийн үнэлгээ', 'Recent analyses')}</h4>
         {recentError && (
           <p className="account-error" role="alert">
             {recentError}
@@ -1714,7 +2103,10 @@ function AnalysisPanel({
         )}
         {recent.length === 0 && !recentError && (
           <p className="account-caption">
-            No recent analyses loaded. Your completed outfit reviews will appear here.
+            {t(
+              'Сүүлийн үнэлгээ алга. Дууссан хослолын үнэлгээ энд харагдана.',
+              'No recent analyses yet. Your completed outfit analyses will appear here.',
+            )}
           </p>
         )}
         {recent.map((item) => (
@@ -1725,17 +2117,17 @@ function AnalysisPanel({
             disabled={busy || loadingScore}
           >
             <span>
-              <strong>{item.title || 'Outfit analysis'}</strong>
+              <strong>{item.title || t('Хослолын үнэлгээ', 'Outfit analysis')}</strong>
               <small>{dateLabel(item.created_at)}</small>
             </span>
             <b>
               {item.status === 'scored'
                 ? item.unreadable
-                  ? 'Unreadable'
+                  ? t('Уншигдсангүй', 'Unreadable')
                   : item.overall == null
-                    ? 'Partial'
+                    ? t('Хэсэгчилсэн', 'Partial')
                     : `${item.overall}/100`
-                : humanize(item.status)}
+                : labelFor(scoreStatusLabels, item.status)}
             </b>
           </button>
         ))}
@@ -1745,54 +2137,74 @@ function AnalysisPanel({
 }
 
 function ScoreCard({ score }: { score: ApiScore }) {
+  const dimensions = [
+    [t('Өнгөний зохицол', 'Color harmony'), score.color_harmony],
+    [t('Үс засалт', 'Hairstyle'), score.hairstyle],
+    [t('Аксессуар', 'Accessories'), score.accessory],
+    [t('Хослуулалт', 'Styling'), score.trendiness],
+  ] as const;
   return (
     <article className="account-score-card">
-      <div className="account-section-heading">
-        <h4>{score.title || 'Your outfit analysis'}</h4>
-        <span className="account-status ready">Account result</span>
+      <div className="account-subheading">
+        <h4>{score.title || t('Таны хослолын үнэлгээ', 'Your outfit analysis')}</h4>
+        <span className="account-status">{t('Бүртгэлийн үр дүн', 'Account result')}</span>
       </div>
       {score.status !== 'scored' ? (
         <p>
           {score.status === 'failed'
-            ? 'This analysis could not be completed.'
-            : 'Your photo is being analyzed. Results are not ready yet.'}
+            ? t('Энэ үнэлгээг дуусгаж чадсангүй.', 'This analysis couldn’t be completed.')
+            : t(
+                'Таны зургийг үнэлж байна. Үр дүн хараахан бэлэн болоогүй.',
+                'Your photo is being analyzed. Results aren’t ready yet.',
+              )}
         </p>
       ) : score.unreadable ? (
         <p>
-          The outfit could not be clearly assessed. Try a well-lit photo with your outfit in view.
+          {t(
+            'Хослолыг тодорхой үнэлж чадсангүй. Хослол тань бүтнээрээ харагдах, сайн гэрэлтэй зураг оруулж үзээрэй.',
+            'The outfit couldn’t be clearly assessed. Try a well-lit photo that shows your whole outfit.',
+          )}
         </p>
       ) : (
         <>
-          <div className="account-result-overall">
-            <strong>
-              {score.overall ?? '—'}
-              {score.overall != null && <small>/100</small>}
-            </strong>
-            <span>
-              {score.overall == null ? 'Some details were not visible' : 'Overall style score'}
-            </span>
+          <div className="account-score-main">
+            <div className="account-result-overall">
+              <strong>
+                {score.overall ?? '—'}
+                {score.overall != null && <small>/100</small>}
+              </strong>
+              <span>
+                {score.overall == null
+                  ? t('Зарим хэсэг харагдаагүй', 'Some details weren’t visible')
+                  : t('Нийт стилийн оноо', 'Overall style score')}
+              </span>
+            </div>
+            <div className="account-score-dimensions">
+              {dimensions.map(([label, value]) => (
+                <div key={label}>
+                  <p>
+                    <span>{label}</span>
+                    <strong>
+                      {value == null ? t('Харагдаагүй', 'Not visible') : `${value}/25`}
+                    </strong>
+                  </p>
+                  <span className="account-bar" aria-hidden="true">
+                    <span
+                      style={{
+                        width: `${value == null ? 0 : Math.min(100, Math.max(0, (value / 25) * 100))}%`,
+                      }}
+                    />
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
-          <div className="account-score-dimensions">
-            {(
-              [
-                ['Color harmony', score.color_harmony],
-                ['Hairstyle', score.hairstyle],
-                ['Accessories', score.accessory],
-                ['Styling', score.trendiness],
-              ] as const
-            ).map(([label, value]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <strong>{value == null ? 'Not visible' : `${value}/25`}</strong>
-              </div>
-            ))}
-          </div>
-          <p>{score.comment}</p>
+          <p className="account-score-comment">{score.comment}</p>
           {score.positives.length > 0 && (
             <ul>
               {score.positives.map((text, i) => (
                 <li key={i}>
-                  <Check size={14} />
+                  <Check size={15} weight="regular" />
                   {text}
                 </li>
               ))}
@@ -1800,7 +2212,7 @@ function ScoreCard({ score }: { score: ApiScore }) {
           )}
           {score.negatives.length > 0 && (
             <div className="account-improvements">
-              <strong>Things to refine</strong>
+              <strong>{t('Сайжруулах зүйлс', 'Things to refine')}</strong>
               {score.negatives.map((text, i) => (
                 <p key={i}>{text}</p>
               ))}
@@ -1808,7 +2220,7 @@ function ScoreCard({ score }: { score: ApiScore }) {
           )}
           {score.suggestions.length > 0 && (
             <div className="account-improvements">
-              <strong>Ideas to try</strong>
+              <strong>{t('Туршиж үзэх санаа', 'Ideas to try')}</strong>
               {score.suggestions.map((text, i) => (
                 <p key={i}>{text}</p>
               ))}

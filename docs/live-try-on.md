@@ -11,10 +11,10 @@ The current **Live fitting room** uses Lucy VTON 3.6, a server-held API key, and
 4. Optionally press **Enable camera**. This is a local preview, with no provider session and no microphone.
 5. Press **Start live try-on** to send the reference and camera video to Decart. The disclosure beside Start explains this processing. Camera permission is acquired before creating the provider connection.
 6. Wait for a decoded remote frame to unlock **AI try-on**. Use **Original** to view the unchanged camera, or switch front/rear cameras when the device supports them.
-7. To change clothes during the session, choose another image and press **Apply selected garment**. The UI marks it applied only after the matching provider acknowledgment. Only one change can be pending.
+7. To change clothes during the session, tap another garment in the panel or in the strip over the video. It is sent immediately and marked as worn only after the matching provider acknowledgment. Only one change is in flight; the most recent tap is sent as soon as it lands. Each reference carries a region hint (upper, lower, outfit or layer) and a plain description, which the bridge turns into Decart's recommended “Substitute the … garment with …” or “Add … to the outfit” prompt. Descriptions are limited to letters, numbers and basic punctuation.
 8. Press **Stop** to end camera capture and close signaling. Every new session requires a new explicit Start; there is no automatic reconnect.
 
-The UI caps sessions at **30 seconds**. The bridge supports 30- or 60-second requests, but the current screen always selects 30. Navigation/unmount, a hidden tab, pagehide, a covering app panel, connection failure or the time cap also stop the session. There is no pointer/keyboard inactivity timeout, so the user can stand back for the camera. A reference update that is not confirmed within 15 seconds stops the session.
+Sessions have **no time limit** by default: the screen requests an open-ended session, the bridge omits Decart's `maxSessionDuration` token constraint, and the session runs until Stop. `DECART_MAX_SESSION_SECONDS` (minimum 10) caps every session server-side; 30- or 60-second client requests remain supported and are clamped to that cap. `DECART_SPEED=fast` adds Decart's fast mode (`speed=fast`), which lowers latency at twice the per-second price. Navigation/unmount, a hidden tab, pagehide, a covering app panel, connection failure or a configured cap also stop the session. There is no pointer/keyboard inactivity timeout, so the user can stand back for the camera. A reference update that is not confirmed within 15 seconds stops the session.
 
 ## Direct Decart transport
 
@@ -34,7 +34,7 @@ The bridge translates Decart's reference acknowledgments and SDP/ICE messages in
 
 ## Vercel live deployment
 
-`api/live.mjs` exports a Node HTTP server with WebSocket upgrades. Vercel serves this function alongside the frontend, with Fluid compute enabled and a 120-second function limit. `GET /api/live` reports status; `GET /__lookluxe/decart/status` rewrites to it. Status identifies `transport: "websocket-init"` and `requiresSignIn: true`.
+`api/live.mjs` exports a Node HTTP server with WebSocket upgrades. Vercel serves this function alongside the frontend, with Fluid compute enabled and a 300-second function limit, which also bounds hosted session length. `GET /api/live` reports status; `GET /__lookluxe/decart/status` rewrites to it. Status identifies `transport: "websocket-init"` and `requiresSignIn: true`.
 
 After explicit Start and local camera preparation, the client opens `WS /api/live` and sends the reference, MIME type, duration, and Firebase ID token in its first message. The token is never in the URL. The server checks the origin and payload, verifies the Firebase token against Google's public signing keys, and requires a verified Google-provider email in `LIVE_ALLOWED_EMAILS`. Failed authorization never contacts Decart. Initialization must finish within 15 seconds. All following signaling and garment updates reuse the accepted connection.
 
@@ -70,4 +70,4 @@ Safari then received actual Lucy VTON 3.6 output using a synthetic canvas manneq
 
 The second run passed complete cleanup: both tracks disabled and ended, peers closed, videos detached and socket closed. Safari's local track ended immediately; the remote track reached ended during a 26 ms observation window. The earlier immediate remote-track sample reflected this native timing, not a cleanup failure. The production server also served the app and configured-status endpoint successfully on port 5176, then was stopped.
 
-**Appearance on a real wearer remains a manual acceptance check.** Use an explicit 30-second Start with a usable camera to assess the clothing transformation and the visible result of a garment change. Hosted sessions require an authorized Google sign-in; local sessions do not. Synthetic-input output and a reference acknowledgment do not establish physical fit or exact garment fidelity.
+**Appearance on a real wearer remains a manual acceptance check.** Use an explicit Start with a usable camera to assess the clothing transformation and the visible result of a garment change. Hosted sessions require an authorized Google sign-in; local sessions do not. Synthetic-input output and a reference acknowledgment do not establish physical fit or exact garment fidelity.

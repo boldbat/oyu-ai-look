@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { X } from 'lucide-react';
+import { X } from '@phosphor-icons/react';
+import { t } from '../lib/lang';
 export function Dialog({
   title,
   onClose,
@@ -53,7 +54,12 @@ export function Dialog({
     >
       <div className="dialog-head">
         <h2 id={titleId}>{title}</h2>
-        <button type="button" className="icon-button" aria-label="Close dialog" onClick={onClose}>
+        <button
+          type="button"
+          className="icon-button"
+          aria-label={t('Цонх хаах', 'Close dialog')}
+          onClick={onClose}
+        >
           <X size={20} />
         </button>
       </div>

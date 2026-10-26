@@ -1,24 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowUpRight,
+  ArrowRight,
   Bell,
-  CalendarDays,
   Camera,
+  CaretRight,
   Check,
-  ChevronDown,
-  ChevronRight,
-  CircleHelp,
-  Compass,
-  Heart,
-  History as HistoryIcon,
-  LayoutDashboard,
-  Menu,
-  Search,
-  Settings as SettingsIcon,
-  Shirt,
-  Sparkles,
-  Video,
-} from 'lucide-react';
+  ClockCounterClockwise,
+  CoatHanger,
+  GearSix,
+  Info,
+  List,
+  MagnifyingGlass,
+  Question,
+  SquaresFour,
+  Swatches,
+  VideoCamera,
+} from '@phosphor-icons/react';
 import { useApp } from './lib/store';
 import type { Page } from './lib/types';
 import { Home } from './features/Home';
@@ -28,16 +25,26 @@ import { History } from './features/History';
 import { Settings } from './features/Settings';
 import { Account } from './features/Account';
 import { PitchTryOn } from './features/PitchTryOn';
+import { OyuCompanion } from './components/Oyu';
+import { useOyuSettings } from './lib/oyu-settings';
+import { OyuOutfitCheck } from './features/OyuOutfitCheck';
 import { Dialog } from './components/Dialog';
-const navigation: { id: Page; label: string; icon: typeof LayoutDashboard }[] = [
-  { id: 'home', label: 'Overview', icon: LayoutDashboard },
-  { id: 'wardrobe', label: 'My wardrobe', icon: Shirt },
-  { id: 'studio', label: 'Look Studio', icon: Sparkles },
-  { id: 'live', label: 'Live fitting room', icon: Video },
-  { id: 'history', label: 'Style history', icon: HistoryIcon },
+import { journeySteps } from './components/Journey';
+import { t } from './lib/lang';
+/** A function so the labels follow the current language; call it while rendering. */
+const navigation = (): { id: Page; label: string; icon: typeof SquaresFour }[] => [
+  { id: 'home', label: t('Тойм', 'Overview'), icon: SquaresFour },
+  { id: 'wardrobe', label: t('Миний шүүгээ', 'My wardrobe'), icon: CoatHanger },
+  { id: 'studio', label: t('Хослолын студи', 'Look studio'), icon: Swatches },
+  { id: 'live', label: t('Шууд өмсөж үзэх', 'Live try-on'), icon: VideoCamera },
+  { id: 'history', label: t('Хувцаслалтын түүх', 'Style history'), icon: ClockCounterClockwise },
 ];
 export default function App() {
-  const { page, navigate, search, setSearch, data, toast, openAccount } = useApp();
+  const { page, navigate, search, setSearch, data, toast, openAccount, updatePreferences } =
+    useApp();
+  const language = data.preferences.language;
+  const oyu = useOyuSettings();
+  const [checkOutfit, setCheckOutfit] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const sidebarRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -75,9 +82,12 @@ export default function App() {
   const [help, setHelp] = useState(false);
   const [notifications, setNotifications] = useState(false);
   useEffect(() => {
-    document.title = `${navigation.find((item) => item.id === page)?.label || 'Settings'} · Oyu AI`;
     setMobileOpen(false);
   }, [page]);
+  // The tab title names the page in the current language, so it follows both.
+  useEffect(() => {
+    document.title = `${navigation().find((item) => item.id === page)?.label || t('Тохиргоо', 'Settings')} · Oyu AI`;
+  }, [page, language]);
   return (
     <div className="app-shell">
       <a
@@ -88,12 +98,12 @@ export default function App() {
           document.getElementById('main')?.focus();
         }}
       >
-        Skip to content
+        {t('Үндсэн агуулга руу шилжих', 'Skip to content')}
       </a>
       {mobileOpen && (
         <button
           className="sidebar-scrim"
-          aria-label="Close navigation"
+          aria-label={t('Цэс хаах', 'Close navigation')}
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -101,44 +111,29 @@ export default function App() {
         role={mobileOpen ? 'dialog' : undefined}
         aria-modal={mobileOpen ? true : undefined}
         ref={sidebarRef}
-        aria-label="Workspace navigation"
+        aria-label={t('Орчны цэс', 'Workspace navigation')}
         className={`sidebar ${mobileOpen ? 'open' : ''}`}
       >
-        <button className="brand" onClick={() => navigate('home')} aria-label="Oyu AI home">
+        <button
+          className="brand"
+          onClick={() => navigate('home')}
+          aria-label={t('Oyu AI нүүр', 'Oyu AI home')}
+        >
           <span className="brand-mark">
             <img src="/assets/lookluxe_mark.png" alt="" />
           </span>
           <span>Oyu AI</span>
         </button>
-        <button
-          className="workspace-picker"
-          onClick={() => {
-            setMobileOpen(false);
-            openAccount();
-          }}
-        >
-          <span className="workspace-avatar">
-            {data.preferences.name.slice(0, 1).toUpperCase()}
-          </span>
-          <span>
-            <strong>{page === 'live' ? 'Oyu AI account' : 'Personal workspace'}</strong>
-            <small>{page === 'live' ? 'Account & wardrobe' : 'Sample collection'}</small>
-          </span>
-          <ChevronDown size={15} />
-        </button>
-        <p className="nav-label">YOUR EVERYDAY, ELEVATED</p>
-        <nav aria-label="Main navigation">
-          {navigation.map(({ id, label, icon: Icon }) => (
+        <nav aria-label={t('Үндсэн цэс', 'Main navigation')}>
+          {navigation().map(({ id, label, icon: Icon }) => (
             <button
               key={id}
               className={`nav-item ${page === id ? 'active' : ''}`}
               aria-current={page === id ? 'page' : undefined}
               onClick={() => navigate(id)}
             >
-              <Icon size={19} strokeWidth={1.65} />
+              <Icon size={20} />
               <span>{label}</span>
-              {id === 'studio' && <span className="nav-new">NEW</span>}
-              {page === id && id !== 'studio' && <span className="nav-dot" />}
             </button>
           ))}
         </nav>
@@ -148,8 +143,8 @@ export default function App() {
           onClick={() => navigate('settings')}
           aria-current={page === 'settings' ? 'page' : undefined}
         >
-          <SettingsIcon size={19} strokeWidth={1.65} />
-          <span>Settings</span>
+          <GearSix size={20} />
+          <span>{t('Тохиргоо', 'Settings')}</span>
         </button>
         <button
           className="nav-item"
@@ -158,26 +153,20 @@ export default function App() {
             setHelp(true);
           }}
         >
-          <CircleHelp size={19} strokeWidth={1.65} />
-          <span>A little guidance</span>
-          <ArrowUpRight size={14} className="nav-end" />
+          <Question size={20} />
+          <span>{t('Хэрхэн ажилладаг вэ', 'How it works')}</span>
         </button>
         <div className="sidebar-bottom">
-          <div className="upgrade-card">
-            <span className="upgrade-icon">
-              <Sparkles size={19} />
-            </span>
-            <h3>
-              More possibilities.
-              <br />
-              More you.
-            </h3>
+          <div className="sidebar-pro">
+            <strong>Oyu Pro</strong>
             <p>
-              Meet your wardrobe’s
-              <br />
-              full potential with Pro.
+              {t(
+                'Хязгааргүй өмсөж үзэх, зургийн үнэлгээ, хувийн зөвлөмж.',
+                'Unlimited try-ons, photo analysis and personal recommendations.',
+              )}
             </p>
             <button
+              className="text-link"
               onClick={() => {
                 navigate('settings');
                 setTimeout(
@@ -187,9 +176,8 @@ export default function App() {
                 );
               }}
             >
-              Explore membership <ArrowUpRight size={16} />
+              {t('Гишүүнчлэл үзэх', 'Explore membership')} <ArrowRight size={15} weight="regular" />
             </button>
-            <span className="upgrade-star">✳</span>
           </div>
           <button
             className="profile-button"
@@ -201,9 +189,13 @@ export default function App() {
             <span className="avatar">{data.preferences.name.slice(0, 1).toUpperCase()}</span>
             <span>
               <strong>{data.preferences.name}</strong>
-              <small>Sample workspace</small>
+              <small>
+                {page === 'live'
+                  ? t('Oyu AI бүртгэл', 'Oyu AI account')
+                  : t('Жишээ орчин', 'Sample workspace')}
+              </small>
             </span>
-            <ChevronRight size={16} />
+            <CaretRight size={16} />
           </button>
         </div>
       </aside>
@@ -212,17 +204,17 @@ export default function App() {
           <div className="topbar-start">
             <button
               className="icon-button mobile-menu"
-              aria-label="Open navigation"
+              aria-label={t('Цэс нээх', 'Open navigation')}
               onClick={() => setMobileOpen(true)}
             >
-              <Menu size={22} />
+              <List size={22} />
             </button>
             <span className="breadcrumb">
-              My workspace <ChevronRight size={13} />{' '}
+              Oyu AI <CaretRight size={12} weight="regular" />{' '}
               <strong>
                 {page === 'home'
-                  ? 'Overview'
-                  : navigation.find((n) => n.id === page)?.label || 'Settings'}
+                  ? t('Тойм', 'Overview')
+                  : navigation().find((n) => n.id === page)?.label || t('Тохиргоо', 'Settings')}
               </strong>
             </span>
           </div>
@@ -237,29 +229,41 @@ export default function App() {
                   setSearch(q);
                 }}
               >
-                <Search size={16} />
+                <MagnifyingGlass size={17} />
                 <input
-                  aria-label="Search your wardrobe"
+                  aria-label={t('Шүүгээнээсээ хайх', 'Search your wardrobe')}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Find something in your wardrobe"
+                  placeholder={t('Шүүгээнээсээ хувцас хайх', 'Find something in your wardrobe')}
                 />
-                <kbd>↵</kbd>
               </form>
             )}
             <span className="demo-pill">
-              <span />
-              {page === 'live' ? 'Live workspace' : 'Sample workspace'}
+              {page === 'live'
+                ? t('Бодит орчин', 'Live workspace')
+                : t('Жишээ орчин', 'Sample workspace')}
             </span>
             <button
+              type="button"
+              className="lang-toggle"
+              aria-label={t('Англи хэл рүү шилжих', 'Switch to Mongolian')}
+              title={t('Англи хэл рүү шилжих', 'Switch to Mongolian')}
+              onClick={() => updatePreferences({ language: language === 'mn' ? 'en' : 'mn' })}
+            >
+              {language === 'mn' ? 'EN' : 'MN'}
+            </button>
+            <button
               className="icon-button notification-button"
-              aria-label="Notifications"
+              aria-label={t('Мэдэгдэл', 'Notifications')}
               onClick={() => setNotifications(true)}
             >
-              <Bell size={19} />
-              <i />
+              <Bell size={20} />
             </button>
-            <button className="top-avatar" aria-label="Open account" onClick={openAccount}>
+            <button
+              className="top-avatar"
+              aria-label={t('Бүртгэл нээх', 'Open account')}
+              onClick={openAccount}
+            >
               {data.preferences.name.slice(0, 1)}
             </button>
           </div>
@@ -282,78 +286,111 @@ export default function App() {
             <Settings />
           </div>
           <footer className="footer">
-            <span>A little less deciding. A lot more you.</span>
             <span>
-              Made with intention <span>✦</span> Oyu AI
+              © {new Date().getFullYear()} Oyu AI · {t('Хувийн стилист', 'Personal stylist')}
+            </span>
+            <span>
+              {t(
+                'Жишээ орчны өгөгдөл зөвхөн энэ хөтөчид хадгалагдана',
+                'Sample workspace data stays in this browser only',
+              )}
             </span>
           </footer>
         </main>
       </div>
+      {page !== 'live' && oyu.companion && (
+        <OyuCompanion hidden={mobileOpen} onCheckOutfit={() => setCheckOutfit(true)} />
+      )}
       {toast && (
         <div className="toast" role="status">
           <span className="toast-icon">
-            <Check size={15} />
+            <Check size={16} />
           </span>
           {toast}
-          <button aria-label="View settings" onClick={() => navigate('settings')}>
-            <ChevronRight size={15} />
+          <button
+            aria-label={t('Тохиргоо харах', 'View settings')}
+            onClick={() => navigate('settings')}
+          >
+            <CaretRight size={15} weight="regular" />
           </button>
         </div>
       )}
+      {checkOutfit && <OyuOutfitCheck onClose={() => setCheckOutfit(false)} />}
       <Account />
       {notifications && (
-        <Dialog title="You’re all caught up" onClose={() => setNotifications(false)}>
+        <Dialog title={t('Мэдэгдэл', 'Notifications')} onClose={() => setNotifications(false)}>
           <div className="empty-state">
             <Bell size={32} />
-            <h3>A quieter kind of app.</h3>
+            <h3>{t('Шинэ мэдэгдэл алга', 'You’re all caught up')}</h3>
             <p>
-              Only important account updates appear here. This sample workspace has no
-              notifications.
+              {t(
+                'Энд зөвхөн бүртгэлийн чухал мэдээлэл харагдана. Энэ жишээ орчинд мэдэгдэл байхгүй.',
+                'Only important account updates appear here. This sample workspace has no notifications.',
+              )}
             </p>
             <button className="button secondary" onClick={() => setNotifications(false)}>
-              Back to my day
+              {t('Өдөртөө буцах', 'Back to my day')}
             </button>
           </div>
         </Dialog>
       )}
       {help && (
-        <Dialog title="Your wardrobe, with a fresh perspective" onClose={() => setHelp(false)}>
-          <p className="muted">A few small steps to make getting dressed feel effortless.</p>
+        <Dialog
+          title={t('Oyu AI хэрхэн ажилладаг вэ', 'How Oyu AI works')}
+          onClose={() => setHelp(false)}
+        >
+          <p className="muted">
+            {t(
+              'Oyu AI бол таны байгаа хувцсан дээр суурилсан хувийн стилист. Дөрвөн алхам:',
+              'Oyu AI is a personal stylist built around the clothes you already own. Four steps:',
+            )}
+          </p>
           <div className="help-list">
-            {[
-              {
-                icon: Shirt,
-                title: 'Make room for what you own',
-                text: 'Add pieces to My wardrobe. Choose an image, confirm the details, and make them yours.',
-              },
-              {
-                icon: Compass,
-                title: 'Discover new combinations',
-                text: 'Build a look from your available pieces in Look Studio, then save it for another day.',
-              },
-              {
-                icon: CalendarDays,
-                title: 'Build your style story',
-                text: 'Log what you actually wear. Your wear journal is separate from outfit photo analysis.',
-              },
-              {
-                icon: Camera,
-                title: 'Connect for the full picture',
-                text: 'Sign in to your existing Oyu AI backend to view your real account. The sample workspace stays separate.',
-              },
-            ].map(({ icon: Icon, title, text }) => (
-              <div key={title}>
-                <Icon size={21} />
+            {journeySteps().map(({ page: target, title, text, icon: Icon }, index) => (
+              <button
+                key={target}
+                className="help-step"
+                onClick={() => {
+                  setHelp(false);
+                  navigate(target);
+                }}
+              >
+                <Icon size={22} />
                 <span>
-                  <strong>{title}</strong>
+                  <strong>
+                    {index + 1}. {title}
+                  </strong>
                   <p>{text}</p>
                 </span>
-              </div>
+                <CaretRight size={16} />
+              </button>
             ))}
+            <div>
+              <Camera size={22} />
+              <span>
+                <strong>
+                  {t(
+                    'Бүрэн боломжийг ашиглахын тулд холбогдоорой',
+                    'Connect for the full experience',
+                  )}
+                </strong>
+                <p>
+                  {t(
+                    'Зургийн үнэлгээ болон жинхэнэ шүүгээгээ ашиглахын тулд Oyu AI бүртгэлдээ нэвтэрнэ үү. Жишээ орчин тусдаа хадгалагдана.',
+                    'Sign in to your Oyu AI account to use photo analysis and your real wardrobe. The sample workspace is kept separate.',
+                  )}
+                </p>
+              </span>
+            </div>
           </div>
           <div className="notice">
-            <Heart size={17} />
-            <p>Your sample edits stay in this browser. Export a copy from Settings anytime.</p>
+            <Info size={18} />
+            <p>
+              {t(
+                'Жишээ орчинд хийсэн өөрчлөлт энэ хөтөчид хадгалагдана. Тохиргооноос хүссэн үедээ хуулбар татаж аваарай.',
+                'Your sample edits stay in this browser. Download a copy from Settings anytime.',
+              )}
+            </p>
           </div>
           <button
             className="button"
@@ -362,7 +399,7 @@ export default function App() {
               navigate('wardrobe');
             }}
           >
-            Let’s start with your wardrobe <ArrowUpRight size={16} />
+            {t('Шүүгээнээсээ эхэлье', 'Let’s start with your wardrobe')} <ArrowRight size={16} />
           </button>
         </Dialog>
       )}

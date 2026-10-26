@@ -1,41 +1,95 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  ArrowLeft,
-  Bookmark,
-  Camera,
+  ArrowUpRight,
+  BookmarkSimple,
   Check,
-  CheckCircle2,
-  CircleHelp,
-  Layers3,
+  CheckCircle,
+  Info,
   Plus,
-  Shirt,
-  Sparkles,
-  Trash2,
-  Video,
+  Shuffle,
+  Stack,
+  TShirt,
+  Trash,
+  VideoCamera,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import { useApp } from '../lib/store';
-import { categoryLabels } from '../lib/types';
+import { categoryLabels, fitsAudience, tryOnCategories } from '../lib/types';
+import { AudienceToggle } from '../components/AudienceToggle';
+import type { AudienceFilter } from '../components/AudienceToggle';
 import type { Category } from '../lib/types';
-import { isCompleteLook } from '../lib/demo';
+import { finishingTouches, isCompleteLook, recommend } from '../lib/demo';
+import { reviewLook } from '../lib/oyu';
+import { OyuNote } from '../components/Oyu';
+import { colorLabel, formatDate, kindLabel } from '../lib/i18n';
 import { Dialog } from '../components/Dialog';
+import { StepEyebrow } from '../components/Journey';
+import { t } from '../lib/lang';
 import './features.css';
 
+const boardOrder: Category[] = ['outerwear', 'top', 'dress', 'bottom', 'footwear', 'accessory'];
+/** A piece count in the interface language, e.g. "5 pieces". */
+const pieceCount = (n: number) => t(`${n} хувцас`, `${n} ${n === 1 ? 'piece' : 'pieces'}`);
+
 export function Studio() {
-  const { data, saveLook, deleteLook, navigate, notify } = useApp();
+  const { data, saveLook, deleteLook, navigate, notify, intent, openWith } = useApp();
   const [tab, setTab] = useState<'compose' | 'saved'>('compose');
   const [selected, setSelected] = useState<string[]>([]);
   const [category, setCategory] = useState<Category>('top');
   const [name, setName] = useState('');
   const [saveDialog, setSaveDialog] = useState(false);
-  const [modeDialog, setModeDialog] = useState<'Photo' | 'Live' | null>(null);
+  const [suggestion, setSuggestion] = useState(0);
+  const [audience, setAudience] = useState<AudienceFilter>('all');
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editId, setEditId] = useState<string | undefined>();
-  const pieces = data.garments.filter((g) => selected.includes(g.id));
+  // Lay pieces out the way they're worn: layer, top, bottoms, shoes, then accessories.
+  const pieces = data.garments
+    .filter((g) => selected.includes(g.id))
+    .sort((a, b) => boardOrder.indexOf(a.category) - boardOrder.indexOf(b.category));
   const complete =
     isCompleteLook(selected, data.garments) && pieces.every((g) => g.availability === 'available');
   const selectedCategories = new Set(pieces.map((g) => g.category));
-  const categoryItems = data.garments.filter((g) => g.category === category);
+  const shelf = data.garments.filter((g) => fitsAudience(g, audience));
+  const categoryItems = shelf.filter((g) => g.category === category);
+  const tryOnPiece = pieces.find((g) => tryOnCategories.includes(g.category));
+  const review = reviewLook(pieces, data.preferences);
+  const hasBase =
+    selectedCategories.has('dress') ||
+    (selectedCategories.has('top') && selectedCategories.has('bottom'));
+  const hasShoes = selectedCategories.has('footwear');
+  useEffect(() => {
+    if (intent?.page !== 'studio' || !intent.garmentIds) return;
+    const ids = intent.garmentIds.filter(
+      (id) => data.garments.find((g) => g.id === id)?.availability === 'available',
+    );
+    setSelected(ids);
+    setName('');
+    setEditId(undefined);
+    setTab('compose');
+    const first = data.garments.find((g) => g.id === ids[0]);
+    if (first) setCategory(first.category);
+    // Only a new hand-off should reset the board, not later wardrobe edits.
+  }, [intent]);
+  function suggest() {
+    const look = recommend(data.garments, suggestion, audience);
+    const ids = [...look, ...finishingTouches(look, data.garments, suggestion, audience)].map(
+      (g) => g.id,
+    );
+    setSuggestion((value) => value + 1);
+    if (!isCompleteLook(ids, data.garments)) {
+      notify(
+        t(
+          'Санал авахын тулд цамц, өмд банзал, гутал (эсвэл даашинз, гутал) нэмнэ үү.',
+          'Add a top, bottoms and shoes (or a dress and shoes) to get a suggestion.',
+        ),
+      );
+      return;
+    }
+    setSelected(ids);
+    setName('');
+    setEditId(undefined);
+    setTab('compose');
+  }
   function choose(id: string) {
     const item = data.garments.find((g) => g.id === id);
     if (!item || item.availability !== 'available') return;
@@ -65,13 +119,20 @@ export function Studio() {
     <div className="studio-page feature-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">A LITTLE EXPERIMENTATION. A LOT OF YOU.</p>
-          <h1 className="page-title">Your personal styling space.</h1>
-          <p className="muted">Bring your pieces together. Find a combination that feels right.</p>
+          <StepEyebrow page="studio" />
+          <h1 className="page-title">
+            {t('Өөрийн хувцаснаас хослол бүтээх', 'Create looks from your own clothes')}
+          </h1>
+          <p className="muted page-explainer">
+            {t(
+              'Баруун талын самбараас хувцас сонгоно уу. Цамц ба өмд банзал (эсвэл даашинз) дээр гутал нэмбэл бүтэн хослол болно; гадуур хувцас, аксессуар заавал биш. Дараа өмсөхөөр хадгалах эсвэл шууд өмсөж үзээрэй.',
+              'Choose pieces from the panel on the right. A top and bottoms (or a dress) plus shoes make a complete look; outerwear and accessories are optional. Save it for later or try it on live.',
+            )}
+          </p>
         </div>
-        <span className="badge studio-local-badge">
-          <Layers3 size={14} /> Personal studio
-        </span>
+        <button className="button" onClick={suggest}>
+          <Shuffle size={18} /> {t('Хослол санал болгох', 'Suggest a look')}
+        </button>
       </div>
       <div className="studio-navigation">
         <div className="segmented">
@@ -80,36 +141,43 @@ export function Studio() {
             aria-pressed={tab === 'compose'}
             onClick={() => setTab('compose')}
           >
-            <Layers3 size={16} /> Create a look
+            <Stack size={16} /> {t('Хослол үүсгэх', 'Create a look')}
           </button>
           <button
             className={tab === 'saved' ? 'active' : ''}
             aria-pressed={tab === 'saved'}
             onClick={() => setTab('saved')}
           >
-            <Bookmark size={16} /> Saved looks{' '}
+            <BookmarkSimple size={16} /> {t('Хадгалсан хослол', 'Saved looks')}
             <span className="tab-count">{data.savedLooks.length}</span>
           </button>
         </div>
         <div className="studio-modes">
-          <button className="button ghost small" onClick={() => setModeDialog('Photo')}>
-            <Camera size={16} /> Photo try-on <span className="coming-label">Connect</span>
-          </button>
-          <button className="button ghost small" onClick={() => navigate('live')}>
-            <Video size={16} /> Live fitting room
+          <button
+            className="button secondary small"
+            onClick={() =>
+              tryOnPiece
+                ? openWith({ page: 'live', garmentIds: [tryOnPiece.id] })
+                : navigate('live')
+            }
+          >
+            <VideoCamera size={18} />
+            {tryOnPiece
+              ? t('Энэ хослолыг шууд өмсөж үзэх', 'Try this look on live')
+              : t('Шууд өмсөж үзэх өрөө', 'Open Live try-on')}
           </button>
         </div>
       </div>
       {tab === 'compose' ? (
         <div className="composer-layout">
-          <section className="card composer-board">
+          <section className="composer-board" aria-label={t('Хослолын самбар', 'Look board')}>
             <div className="composer-board-heading">
               <div>
-                <p className="eyebrow">THE BIG PICTURE</p>
-                <h2>{editId ? name : 'Your next great combination'}</h2>
+                <p className="overline">{t('Бүтэн дүр төрх', 'The full look')}</p>
+                <h2>{editId ? name : t('Таны дараагийн хослол', 'Your next look')}</h2>
               </div>
               <button className="text-link" onClick={startNew} disabled={selected.length === 0}>
-                Start fresh
+                {t('Шинээр эхлэх', 'Start fresh')}
               </button>
             </div>
             <div className={`flatlay-board ${pieces.length === 0 ? 'is-empty' : ''}`}>
@@ -119,74 +187,87 @@ export function Studio() {
                     <img loading="lazy" decoding="async" src={g.image} alt={g.name} />
                     <button
                       className="icon-button"
-                      aria-label={`Remove ${g.name} from look`}
+                      aria-label={t(`Хослолоос хасах: ${g.name}`, `Remove ${g.name} from the look`)}
                       onClick={() => setSelected((current) => current.filter((id) => id !== g.id))}
                     >
-                      <X size={14} />
+                      <X size={14} weight="regular" />
                     </button>
                     <span>
                       {g.name}
-                      {g.availability === 'laundry' ? ' · In the laundry' : ''}
+                      {g.availability === 'laundry' ? t(' · Угаалгад', ' · In the laundry') : ''}
                     </span>
                   </div>
                 ))
               ) : (
                 <div className="composer-empty">
-                  <span>
-                    <Shirt size={40} strokeWidth={1} />
-                  </span>
-                  <h3>Every great look starts with one piece.</h3>
+                  <h3>{t('Хослол нэг хувцаснаас эхэлнэ', 'Every look starts with one piece')}</h3>
                   <p>
-                    Choose a favorite from your wardrobe
-                    <br />
-                    and see what comes together.
+                    {t(
+                      'Шүүгээнээсээ дуртай хувцсаа сонгоход энд байрлана. Дараа нь бусдыг нь нэмж хослуулаарай.',
+                      'Choose a favorite from your wardrobe and it will appear here. Then add the rest to complete the look.',
+                    )}
                   </p>
-                  <span className="composer-direction">
-                    Your wardrobe is right over here <span aria-hidden="true">↗</span>
-                  </span>
                 </div>
               )}
             </div>
             <div className="composer-checklist">
-              <span
-                className={
-                  selectedCategories.has('dress') ||
-                  (selectedCategories.has('top') && selectedCategories.has('bottom'))
-                    ? 'is-complete'
-                    : ''
-                }
-              >
-                <CheckCircle2 size={15} /> Top + bottom, or a dress
+              <span className={hasBase ? 'is-complete' : ''}>
+                <CheckCircle size={16} weight={hasBase ? 'fill' : 'light'} />{' '}
+                {t('Цамц + өмд банзал, эсвэл даашинз', 'Top + bottoms, or a dress')}
               </span>
-              <span className={selectedCategories.has('footwear') ? 'is-complete' : ''}>
-                <CheckCircle2 size={15} /> Footwear
+              <span className={hasShoes ? 'is-complete' : ''}>
+                <CheckCircle size={16} weight={hasShoes ? 'fill' : 'light'} /> {t('Гутал', 'Shoes')}
               </span>
-              <span>Layers & accessories optional</span>
+              <span>
+                {t('Гадуур хувцас, аксессуар заавал биш', 'Outerwear and accessories are optional')}
+              </span>
             </div>
+            {review && (
+              <OyuNote
+                className="composer-oyu"
+                animate
+                mood={review.mood}
+                score={review.score}
+                lines={review.lines}
+              />
+            )}
             <div className="composer-board-footer">
               <p>
                 {complete
-                  ? 'Looking good. Make this one a keeper.'
+                  ? t(
+                      `${pieces.length} хувцас · хадгалахад бэлэн`,
+                      `${pieceCount(pieces.length)} · ready to save`,
+                    )
                   : pieces.some((g) => g.availability === 'laundry')
-                    ? 'Replace pieces in the laundry before saving.'
-                    : 'Add the essentials to save a complete look.'}
+                    ? t(
+                        'Хадгалахаас өмнө угаалгад байгаа хувцсыг солино уу.',
+                        'Replace pieces in the laundry before saving.',
+                      )
+                    : t(
+                        'Бүтэн хослол хадгалахын тулд үндсэн хувцсаа нэмнэ үү.',
+                        'Add the essentials to save a complete look.',
+                      )}
               </p>
               <button className="button" disabled={!complete} onClick={() => setSaveDialog(true)}>
-                <Bookmark size={16} /> Save this look
+                <BookmarkSimple size={18} /> {t('Хослол хадгалах', 'Save look')}
               </button>
             </div>
           </section>
           <aside className="card composer-wardrobe">
             <div className="composer-picker-title">
-              <h2>From your wardrobe</h2>
+              <h2>{t('Таны шүүгээнээс', 'From your wardrobe')}</h2>
               <button
                 className="icon-button"
-                aria-label="Go to wardrobe to add a piece"
+                aria-label={t(
+                  'Хувцас нэмэхээр шүүгээ рүү очих',
+                  'Go to your wardrobe to add a piece',
+                )}
                 onClick={() => navigate('wardrobe')}
               >
-                <Plus size={19} />
+                <Plus size={20} />
               </button>
             </div>
+            <AudienceToggle value={audience} onChange={setAudience} />
             <div className="composer-category-tabs">
               {(Object.keys(categoryLabels) as Category[]).map((c) => (
                 <button
@@ -196,6 +277,7 @@ export function Studio() {
                   onClick={() => setCategory(c)}
                 >
                   {categoryLabels[c]}
+                  <span className="tab-count">{shelf.filter((g) => g.category === c).length}</span>
                 </button>
               ))}
             </div>
@@ -212,32 +294,43 @@ export function Studio() {
                     <img loading="lazy" decoding="async" src={g.image} alt="" />
                     {selected.includes(g.id) && (
                       <span className="piece-selected">
-                        <Check size={13} />
+                        <Check size={14} weight="regular" />
                       </span>
                     )}
                   </div>
                   <strong>{g.name}</strong>
-                  <span>{g.availability === 'laundry' ? 'In the laundry' : g.color}</span>
+                  <span>
+                    {g.availability === 'laundry'
+                      ? t('Угаалгад', 'In the laundry')
+                      : g.kind
+                        ? kindLabel(g.kind)
+                        : colorLabel(g.color)}
+                  </span>
                 </button>
               ))}
             </div>
             {categoryItems.length === 0 && (
               <div className="composer-category-empty">
-                <Shirt size={28} />
-                <p>No {categoryLabels[category].toLowerCase()} here yet.</p>
+                <TShirt size={28} />
+                <p>
+                  {t(
+                    `${categoryLabels[category]} одоогоор алга.`,
+                    `No ${categoryLabels[category].toLowerCase()} yet.`,
+                  )}
+                </p>
                 <button className="text-link" onClick={() => navigate('wardrobe')}>
-                  Add to your wardrobe <Plus size={14} />
+                  {t('Шүүгээндээ нэмэх', 'Add to your wardrobe')} <Plus size={16} />
                 </button>
               </div>
             )}
             <div className="styling-note">
-              <Sparkles size={18} />
-              <div>
-                <strong>A little styling thought</strong>
-                <p>
-                  Start with the piece you feel best in. Let the rest of your look follow its lead.
-                </p>
-              </div>
+              <strong>{t('Хослуулах жижиг зөвлөгөө', 'A small styling tip')}</strong>
+              <p>
+                {t(
+                  'Өөрт хамгийн таатай санагддаг хувцаснаасаа эхлээрэй. Бусад нь түүнийг дагаад бүрдэнэ.',
+                  'Start with the piece you feel best in. Let the rest of your look follow its lead.',
+                )}
+              </p>
             </div>
           </aside>
         </div>
@@ -245,11 +338,16 @@ export function Studio() {
         <section className="saved-looks-section">
           <div className="section-heading">
             <div>
-              <h2>Good looks, kept close.</h2>
-              <p className="muted">Your favorite combinations, ready for another day.</p>
+              <h2>{t('Хадгалсан хослолууд', 'Saved looks')}</h2>
+              <p className="muted">
+                {t(
+                  'Дуртай хослолууд тань өөр өдөр өмсөхөд бэлэн.',
+                  'Your favorite looks, ready for another day.',
+                )}
+              </p>
             </div>
             <button className="button secondary small" onClick={startNew}>
-              <Plus size={16} /> New look
+              <Plus size={16} /> {t('Шинэ хослол', 'New look')}
             </button>
           </div>
           <div className="saved-look-grid">
@@ -259,29 +357,29 @@ export function Studio() {
                 isCompleteLook(look.garmentIds, data.garments) &&
                 items.every((g) => g.availability === 'available');
               return (
-                <article className="card saved-look-card" key={look.id}>
+                <article className="saved-look-card" key={look.id}>
                   <div className="saved-look-images">
                     {items.map((g) => (
                       <img loading="lazy" decoding="async" key={g.id} src={g.image} alt={g.name} />
                     ))}
-                    <span className="saved-look-count">{items.length} pieces</span>
                   </div>
                   <div className="saved-look-content">
+                    <h3>{look.name}</h3>
+                    <p>
+                      {t(
+                        `${items.length} хувцас · Хадгалсан ${formatDate(look.createdAt)}`,
+                        `${pieceCount(items.length)} · Saved ${formatDate(look.createdAt)}`,
+                      )}
+                    </p>
                     <span className={`look-availability ${available ? 'available' : ''}`}>
                       <span />
-                      {available ? 'Ready when you are' : 'Needs a little attention'}
+                      {available
+                        ? t('Өмсөхөд бэлэн', 'Ready to wear')
+                        : t('Анхаарал хэрэгтэй', 'Needs attention')}
                     </span>
-                    <h3>{look.name}</h3>
-                    <p className="muted">
-                      Saved{' '}
-                      {new Date(`${look.createdAt}T12:00:00`).toLocaleDateString('en', {
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </p>
-                    <div>
+                    <div className="saved-look-actions">
                       <button
-                        className="button secondary small"
+                        className="text-link"
                         onClick={() => {
                           setSelected(look.garmentIds);
                           setName(look.name);
@@ -289,14 +387,14 @@ export function Studio() {
                           setTab('compose');
                         }}
                       >
-                        Open in Studio <span aria-hidden="true">↗</span>
+                        {t('Студид нээх', 'Open in Look studio')} <ArrowUpRight size={16} />
                       </button>
                       <button
                         className="icon-button"
-                        aria-label={`Delete ${look.name}`}
+                        aria-label={t(`Устгах: ${look.name}`, `Delete ${look.name}`)}
                         onClick={() => setDeleteId(look.id)}
                       >
-                        <Trash2 size={17} />
+                        <Trash size={18} />
                       </button>
                     </div>
                   </div>
@@ -306,28 +404,39 @@ export function Studio() {
           </div>
           {!data.savedLooks.length && (
             <div className="empty-state">
-              <Bookmark size={32} />
-              <h3>Something worth saving starts here.</h3>
-              <p>Build your first look from pieces in your wardrobe.</p>
+              <BookmarkSimple size={32} />
+              <h3>{t('Хадгалсан хослол алга', 'No saved looks yet')}</h3>
+              <p>
+                {t(
+                  'Шүүгээнийхээ хувцаснаас анхны хослолоо бүтээгээрэй.',
+                  'Build your first look from pieces in your wardrobe.',
+                )}
+              </p>
               <button className="button" onClick={startNew}>
-                Create a look
+                {t('Хослол үүсгэх', 'Create a look')}
               </button>
             </div>
           )}
         </section>
       )}
       <div className="studio-disclaimer">
-        <CircleHelp size={15} />
+        <Info size={16} />
         <p>
-          Composing a look does not record wear or generate a try-on. Record what you wore in{' '}
+          {t(
+            'Хослол бүтээхэд өмссөн бүртгэл хөтлөгдөхгүй, өмсөж үзэх дүрс ч үүсгэхгүй. Өмссөнөө',
+            'Creating a look doesn’t log wear or generate a try-on image. Log what you wore in',
+          )}{' '}
           <button className="text-link" onClick={() => navigate('history')}>
-            History
+            {t('Хувцаслалтын түүх', 'Style history')}
           </button>
-          .
+          {t(' хэсэгт тэмдэглээрэй.', '.')}
         </p>
       </div>
       {saveDialog && (
-        <Dialog title="Give this look a name" onClose={() => setSaveDialog(false)}>
+        <Dialog
+          title={t('Хослолдоо нэр өгөх', 'Give this look a name')}
+          onClose={() => setSaveDialog(false)}
+        >
           <form
             onSubmit={(event) => {
               event.preventDefault();
@@ -339,17 +448,20 @@ export function Studio() {
             }}
           >
             <p className="muted">
-              Something that makes it easy to find when the mood strikes again.
+              {t(
+                'Дахин өмсөх хүсэл төрөхөд амархан олохоор нэр өгөөрэй.',
+                'Pick a name that’s easy to find when the mood strikes again.',
+              )}
             </p>
             <label className="field-label">
-              Look name
+              {t('Хослолын нэр', 'Look name')}
               <input
                 className="field"
                 autoFocus
                 maxLength={80}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="e.g. A slow Sunday"
+                placeholder={t('Жишээ нь: Тайван ням гараг', 'e.g. Slow Sunday')}
                 required
               />
             </label>
@@ -359,70 +471,47 @@ export function Studio() {
                 className="button secondary"
                 onClick={() => setSaveDialog(false)}
               >
-                Keep creating
+                {t('Үргэлжлүүлэх', 'Keep editing')}
               </button>
               <button className="button" type="submit" disabled={!name.trim()}>
-                <Bookmark size={16} />
-                {editId ? 'Save changes' : 'Save look'}
+                <BookmarkSimple size={18} />
+                {editId
+                  ? t('Өөрчлөлт хадгалах', 'Save changes')
+                  : t('Хослол хадгалах', 'Save look')}
               </button>
             </div>
           </form>
         </Dialog>
       )}
-      {modeDialog && (
-        <Dialog
-          title={
-            modeDialog === 'Photo'
-              ? 'Picture the possibilities.'
-              : 'Your fitting room, wherever you are.'
-          }
-          onClose={() => setModeDialog(null)}
-        >
-          <div className="connection-notice">
-            <span>{modeDialog === 'Photo' ? <Camera size={30} /> : <Video size={30} />}</span>
-            <h3>{modeDialog} try-on needs a connected account.</h3>
-            <p className="muted">
-              This local workspace lets you compose and save real combinations.{' '}
-              {modeDialog === 'Photo'
-                ? 'Photo previews require a configured Oyu AI service, a body photo, and your processing consent.'
-                : 'Live sessions require a configured Oyu AI service, supported camera access, and your explicit consent to start.'}
-            </p>
-            <p className="feature-footnote">
-              No image is generated and no camera is started in this preview.
-            </p>
-            <button
-              className="button"
-              onClick={() => {
-                setModeDialog(null);
-                navigate('settings');
-              }}
-            >
-              View connection settings
-            </button>
-            <button className="button ghost" onClick={() => setModeDialog(null)}>
-              <ArrowLeft size={16} /> Back to my look
-            </button>
-          </div>
-        </Dialog>
-      )}
       {deleteId && (
-        <Dialog title="Let this look go?" onClose={() => setDeleteId(null)}>
+        <Dialog
+          title={t('Энэ хослолыг устгах уу?', 'Delete this look?')}
+          onClose={() => setDeleteId(null)}
+        >
           <p className="muted">
-            Your individual wardrobe pieces and wear records will stay right where they are.
+            {t(
+              'Шүүгээн дэх хувцас болон өмссөн бүртгэл тань хэвээр үлдэнэ.',
+              'Your wardrobe pieces and wear log will stay right where they are.',
+            )}
           </p>
           <div className="dialog-actions">
             <button className="button secondary" onClick={() => setDeleteId(null)}>
-              Keep look
+              {t('Үлдээх', 'Keep look')}
             </button>
             <button
-              className="button danger-button"
+              className="button danger"
               onClick={() => {
                 deleteLook(deleteId);
                 setDeleteId(null);
-                notify('Look removed from your saved collection.');
+                notify(
+                  t(
+                    'Хослолыг хадгалсан жагсаалтаас устгалаа.',
+                    'Look removed from your saved looks.',
+                  ),
+                );
               }}
             >
-              Delete look
+              {t('Устгах', 'Delete')}
             </button>
           </div>
         </Dialog>

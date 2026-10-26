@@ -5,6 +5,27 @@ const MAX_IMAGE = 4 * 1024 * 1024;
 const MAX_BODY = Math.ceil((MAX_IMAGE * 4) / 3) + 2048;
 const PROMPT =
   'Replace the clothing on the person with the garment from the reference image. Preserve the person’s face, body, pose and background. Keep the garment’s color, pattern, texture and design.';
+// Decart's VTON prompting guide: one region-specific action per prompt.
+const ACTIONS = {
+  upper: (d) => `Substitute the upper body garment with ${d}.`,
+  lower: (d) => `Substitute the lower body garment with ${d}.`,
+  outfit: (d) => `Substitute the outfit with ${d}.`,
+  footwear: (d) => `Substitute the footwear with ${d}.`,
+  layer: (d) => `Add ${d} to the outfit.`,
+};
+/** Builds the provider prompt from a browser garment hint; undefined keeps the generic prompt. */
+function promptFor(garment) {
+  if (garment === undefined) return PROMPT;
+  if (
+    !exact(garment, ['region', 'description']) ||
+    !Object.hasOwn(ACTIONS, garment.region) ||
+    typeof garment.description !== 'string' ||
+    !/^[\p{L}\p{N} ,.'’&()/-]{3,160}$/u.test(garment.description)
+  )
+    return null;
+  return `${ACTIONS[garment.region](garment.description.trim())} Keep the garment’s color, pattern and details exactly as in the reference image.`;
+}
+const validDuration = (value) => value === null || value === 30 || value === 60;
 const loopback = (value) =>
   ['localhost', '127.0.0.1', '[::1]', '::1', '::ffff:127.0.0.1'].includes(value);
 const exact = (value, keys) =>
@@ -40,10 +61,27 @@ export function createDecartBridge({
   directSocket = false,
   authorizeSession,
   tokenEndpoint = 'https://api.decart.ai/v1/client/tokens',
-  streamEndpoint = 'wss://api3.decart.ai/v1/stream',
+  streamEndpoint = 'wss://api.decart.ai/v1/stream',
+  // null: sessions run until Stop. A number caps every session, in seconds.
+  maxSessionSeconds = null,
+  // 'fast' trades 2x provider cost for lower latency (Decart realtime fast mode).
+  speed = 'standard',
 } = {}) {
   if (!['lucy-vton-3.5', 'lucy-vton-3.6'].includes(model))
     throw new Error('Unsupported DECART_MODEL');
+  if (
+    maxSessionSeconds !== null &&
+    !(Number.isInteger(maxSessionSeconds) && maxSessionSeconds >= 10)
+  )
+    throw new Error('Unsupported DECART_MAX_SESSION_SECONDS');
+  if (!['standard', 'fast'].includes(speed)) throw new Error('Unsupported DECART_SPEED');
+  /** A requested 30/60 second session, or null for as long as this server allows. */
+  const sessionSeconds = (requested) =>
+    requested === null
+      ? maxSessionSeconds
+      : maxSessionSeconds === null
+        ? requested
+        : Math.min(requested, maxSessionSeconds);
   const tickets = new Map();
   const active = new Set();
   const attempts = [];
@@ -101,7 +139,8 @@ export function createDecartBridge({
       reply(res, 200, {
         configured: !!apiKey && (!directSocket || typeof authorizeSession === 'function'),
         model,
-        maxDurationSeconds: 60,
+        maxDurationSeconds: maxSessionSeconds,
+        speed,
         ...(directSocket ? { transport: 'websocket-init', requiresSignIn: true } : {}),
       });
       return true;
@@ -144,9 +183,12 @@ export function createDecartBridge({
         return;
       }
       chunks = [];
+      const prompt = exact(body, ['image', 'mimeType', 'durationSeconds', 'garment'])
+        ? promptFor(body.garment)
+        : null;
       if (
-        !exact(body, ['image', 'mimeType', 'durationSeconds']) ||
-        ![30, 60].includes(body.durationSeconds) ||
+        !prompt ||
+        !validDuration(body.durationSeconds) ||
         !imageValid(body.image, body.mimeType)
       ) {
         fail(res, 400, 'decart_invalid_image');
@@ -159,14 +201,16 @@ export function createDecartBridge({
       }
       const ticket = randomBytes(32).toString('base64url');
       const id = randomUUID();
+      const seconds = sessionSeconds(body.durationSeconds);
       tickets.set(ticket, {
         id,
         image: body.image,
+        prompt,
         origin: req.headers.origin,
         expires: Date.now() + 15000,
-        seconds: body.durationSeconds,
+        seconds,
       });
-      reply(res, 201, { id, ticket, expiresIn: 15, maxDurationSeconds: body.durationSeconds });
+      reply(res, 201, { id, ticket, expiresIn: 15, maxDurationSeconds: seconds });
     });
     req.on('error', () => {
       if (!res.headersSent) fail(res, 400, 'decart_invalid_image');
@@ -215,9 +259,17 @@ export function createDecartBridge({
             if (binary) throw new Error();
             value = JSON.parse(raw.toString());
             if (
-              !exact(value, ['type', 'image', 'mimeType', 'durationSeconds', 'idToken']) ||
+              !exact(value, [
+                'type',
+                'image',
+                'mimeType',
+                'durationSeconds',
+                'idToken',
+                'garment',
+              ]) ||
               value.type !== 'init' ||
-              ![30, 60].includes(value.durationSeconds) ||
+              !promptFor(value.garment) ||
+              !validDuration(value.durationSeconds) ||
               !imageValid(value.image, value.mimeType) ||
               typeof value.idToken !== 'string' ||
               value.idToken.length < 20 ||
@@ -249,8 +301,9 @@ export function createDecartBridge({
           void connect(downstream, {
             id: randomUUID(),
             image: value.image,
+            prompt: promptFor(value.garment),
             origin: req.headers.origin,
-            seconds: value.durationSeconds,
+            seconds: sessionSeconds(value.durationSeconds),
           });
         });
       });
@@ -337,13 +390,16 @@ export function createDecartBridge({
         return;
       }
       if (value?.type === 'reference') {
+        const prompt = exact(value, ['type', 'seq', 'image', 'mimeType', 'garment'])
+          ? promptFor(value.garment)
+          : null;
         if (
           !ready ||
           !offered ||
           swap ||
+          !prompt ||
           !Number.isInteger(value.seq) ||
           value.seq <= lastSeq ||
-          !exact(value, ['type', 'seq', 'image', 'mimeType']) ||
           !imageValid(value.image, value.mimeType)
         ) {
           send({ type: 'select_rejected', seq: value?.seq ?? 0, code: 'selection_invalid' });
@@ -359,7 +415,7 @@ export function createDecartBridge({
           JSON.stringify({
             type: 'set_image',
             image_data: value.image,
-            prompt: PROMPT,
+            prompt,
             enhance_prompt: false,
           }),
         );
@@ -409,7 +465,9 @@ export function createDecartBridge({
         body: JSON.stringify({
           expiresIn: 20,
           allowedModels: [model],
-          constraints: { realtime: { maxSessionDuration: ticket.seconds } },
+          ...(ticket.seconds === null
+            ? {}
+            : { constraints: { realtime: { maxSessionDuration: ticket.seconds } } }),
         }),
       });
       if (closed) return;
@@ -431,7 +489,8 @@ export function createDecartBridge({
       if (
         typeof token.apiKey !== 'string' ||
         token.apiKey.length < 20 ||
-        token.constraints?.realtime?.maxSessionDuration !== ticket.seconds ||
+        (ticket.seconds !== null &&
+          token.constraints?.realtime?.maxSessionDuration !== ticket.seconds) ||
         JSON.stringify(token.permissions?.models) !== JSON.stringify([model])
       ) {
         close('live_decart_token_invalid', true);
@@ -440,6 +499,7 @@ export function createDecartBridge({
       const url = new URL(streamEndpoint);
       url.searchParams.set('api_key', token.apiKey);
       url.searchParams.set('model', model);
+      if (speed === 'fast') url.searchParams.set('speed', 'fast');
       remote = new WebSocket(url, {
         handshakeTimeout: 10000,
         maxPayload: 128 * 1024,
@@ -453,7 +513,7 @@ export function createDecartBridge({
           JSON.stringify({
             type: 'set_image',
             image_data: ticket.image,
-            prompt: PROMPT,
+            prompt: ticket.prompt ?? PROMPT,
             enhance_prompt: false,
           }),
         );
@@ -477,10 +537,15 @@ export function createDecartBridge({
             }
             ready = true;
             clearTimeout(setupTimeout);
-            send({ type: 'ready', continuous: true, session_seconds_remaining: ticket.seconds });
+            send({
+              type: 'ready',
+              continuous: true,
+              ...(ticket.seconds === null ? {} : { session_seconds_remaining: ticket.seconds }),
+            });
             for (const signal of queued) remote.send(JSON.stringify(signal));
             queued = [];
-            later(ticket.seconds * 1000, () => close('live_session_limit'));
+            if (ticket.seconds !== null)
+              later(ticket.seconds * 1000, () => close('live_session_limit'));
           } else if (swap) {
             clearTimeout(swap.timer);
             send(

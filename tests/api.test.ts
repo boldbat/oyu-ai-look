@@ -143,8 +143,10 @@ describe('existing backend authentication contract', () => {
     });
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(api.currentUser).toBeNull();
-    expect(apiErrorMessage(new ApiError('signup_disabled', '', 503))).toContain('registration');
-    expect(apiErrorMessage(new ApiError('provider_unavailable', '', 503))).toContain('temporarily');
+    expect(apiErrorMessage(new ApiError('signup_disabled', '', 503))).toContain('Шинэ бүртгэл');
+    expect(apiErrorMessage(new ApiError('provider_unavailable', '', 503))).toContain(
+      'түр ажиллахгүй',
+    );
   });
 
   it('honors Retry-After in rate-limit feedback', async () => {
@@ -161,7 +163,7 @@ describe('existing backend authentication contract', () => {
       error = cause;
     }
     expect(error).toMatchObject({ code: 'rate_limited', retryAfter: 71 });
-    expect(apiErrorMessage(error)).toContain('71 seconds');
+    expect(apiErrorMessage(error)).toContain('71 секундын дараа');
   });
 });
 
@@ -399,7 +401,7 @@ describe('connected wardrobe ingestion and review', () => {
 
   it('requires an explicit category when extraction did not recognize it', () => {
     expect(() => garmentConfirmation({ ...extractedGarment, category: null })).toThrow(
-      'Choose a category',
+      'ангилал сонгоно уу',
     );
     expect(
       garmentConfirmation({ ...extractedGarment, category: null }, { category: 'dress' }).category,

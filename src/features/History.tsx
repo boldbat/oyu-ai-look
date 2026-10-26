@@ -1,35 +1,40 @@
 import { useState } from 'react';
 import {
+  ArrowRight,
   ArrowUpRight,
-  CalendarDays,
+  CalendarBlank,
+  CaretDown,
+  CaretLeft,
+  CaretRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  Clock3,
-  Image,
+  Clock,
   Info,
   Plus,
-  Shirt,
-  Sparkles,
-} from 'lucide-react';
+  Scan,
+} from '@phosphor-icons/react';
 import { useApp } from '../lib/store';
 import { localDate } from '../lib/demo';
+import { colorLabel, formatDate, weekdayName, weekdayShort } from '../lib/i18n';
 import type { Analysis } from '../lib/types';
 import { Dialog } from '../components/Dialog';
+import { StepEyebrow } from '../components/Journey';
+import { localized, t } from '../lib/lang';
 import './features.css';
 
-function displayDate(
-  date: string,
-  options: Intl.DateTimeFormatOptions = { month: 'long', day: 'numeric' },
-) {
-  return new Date(`${date}T12:00:00`).toLocaleDateString('en', options);
-}
-const dimensionLabels = {
-  color: 'Color harmony',
-  hairstyle: 'Hairstyle',
-  accessories: 'Accessories',
-  styling: 'Overall styling',
-};
+const rangeLabels: Record<string, string> = localized({
+  '7': ['Сүүлийн 7 хоног', 'Last 7 days'],
+  '30': ['Сүүлийн 30 хоног', 'Last 30 days'],
+  all: ['Бүх хугацаа', 'All time'],
+});
+
+const dimensionLabels = localized({
+  color: ['Өнгөний зохицол', 'Color harmony'],
+  hairstyle: ['Үс засалт', 'Hairstyle'],
+  accessories: ['Аксессуар', 'Accessories'],
+  styling: ['Ерөнхий хослуулалт', 'Overall styling'],
+});
+/** A piece count in the interface language, e.g. "5 pieces". */
+const pieceCount = (n: number) => t(`${n} хувцас`, `${n} ${n === 1 ? 'piece' : 'pieces'}`);
 
 export function History() {
   const { data, logWear, navigate } = useApp();
@@ -52,6 +57,7 @@ export function History() {
   const average = scored.length
     ? Math.round(scored.reduce((total, a) => total + (a.overall ?? 0), 0) / scored.length)
     : null;
+  const loggedDays = data.wearLogs.filter((w) => w.garmentIds.length > 0).length;
   const selectedLog = data.wearLogs.find((w) => w.date === date);
   const selectedPieces = [...data.garments, ...data.archivedGarments].filter((g) =>
     selectedLog?.garmentIds.includes(g.id),
@@ -77,12 +83,25 @@ export function History() {
     <div className="history-page feature-page">
       <div className="page-heading">
         <div>
-          <p className="eyebrow">YOUR STYLE, OVER TIME</p>
-          <h1 className="page-title">Every day tells a style story.</h1>
-          <p className="muted">Revisit your looks. Notice what works. Make it yours.</p>
+          <StepEyebrow page="history" />
+          <h1 className="page-title">
+            {t('Юу өмсдөг, юу тохирдгоо хараарай', 'See what you wear and what suits you')}
+          </h1>
+          <p className="muted page-explainer">
+            <strong>{t('Стилийн үнэлгээ', 'Style analysis')}</strong>
+            {t(
+              ' нь хослолын зургийг өнгө, үс засалт, аксессуар, хослуулалтаар нь үнэлж оноо өгнө. ',
+              ' scores outfit photos on color, hairstyle, accessories and styling. ',
+            )}
+            <strong>{t('Өмссөн бүртгэл', 'Wear log')}</strong>
+            {t(
+              ' нь өдөр бүр юу өмссөнийг тань тэмдэглэж, дуртай болон мартагдсан хувцсаа олоход тусална.',
+              ' keeps track of what you wear each day and helps you spot your favorites and forgotten pieces.',
+            )}
+          </p>
         </div>
         <button className="button" onClick={() => startLog(localDate())}>
-          <Plus size={17} /> Log what you wore
+          <Plus size={18} /> {t('Өмссөнөө тэмдэглэх', 'Log what you wore')}
         </button>
       </div>
       <div className="history-navigation">
@@ -92,103 +111,110 @@ export function History() {
             aria-pressed={tab === 'analyses'}
             onClick={() => setTab('analyses')}
           >
-            <Sparkles size={16} /> Style insights
+            <Scan size={16} /> {t('Стилийн үнэлгээ', 'Style analysis')}
           </button>
           <button
             className={tab === 'wear' ? 'active' : ''}
             aria-pressed={tab === 'wear'}
             onClick={() => setTab('wear')}
           >
-            <CalendarDays size={16} /> Wear journal
+            <CalendarBlank size={16} /> {t('Өмссөн бүртгэл', 'Wear log')}
           </button>
         </div>
         {tab === 'analyses' && (
           <label className="feature-select">
-            <CalendarDays size={16} />
+            <CalendarBlank size={16} />
             <select
-              aria-label="Analysis date range"
+              aria-label={t('Үнэлгээний хугацаа', 'Analysis date range')}
               value={range}
               onChange={(e) => setRange(e.target.value)}
             >
-              <option value="7">Last 7 days</option>
-              <option value="30">Last 30 days</option>
-              <option value="all">All time</option>
+              {Object.entries(rangeLabels).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </select>
+            <CaretDown size={14} weight="regular" />
           </label>
         )}
       </div>
       {tab === 'analyses' ? (
         <>
-          <div className="history-summary-grid">
-            <div className="card history-stat">
-              <span>Sample style average</span>
-              <div>
+          <div className="history-stats">
+            <div className="history-stat">
+              <span>{t('Жишээ стилийн дундаж', 'Sample style average')}</span>
+              <div className="history-stat-value">
                 <strong>{average ?? '—'}</strong>
                 <small>/ 100</small>
-                <span className="stat-sparkle">
-                  <Sparkles size={20} />
-                </span>
               </div>
               <p>
-                Based on {scored.length} illustrative{' '}
-                {scored.length === 1 ? 'analysis' : 'analyses'}
+                {t(
+                  `${scored.length} жишээ үнэлгээнд үндэслэсэн`,
+                  `Based on ${scored.length} sample ${scored.length === 1 ? 'analysis' : 'analyses'}`,
+                )}
               </p>
             </div>
-            <div className="card history-stat">
-              <span>Looks in this chapter</span>
-              <div>
+            <div className="history-stat">
+              <span>{t('Энэ хугацааны хослол', 'Outfits in this period')}</span>
+              <div className="history-stat-value">
                 <strong>{analyses.length}</strong>
-                <span className="stat-sparkle">
-                  <Image size={20} />
-                </span>
               </div>
-              <p>Every outfit has something to tell you</p>
+              <p>{rangeLabels[range]}</p>
             </div>
-            <div className="card history-stat journal-stat">
-              <span>Your wardrobe in motion</span>
-              <div>
-                <strong>{data.wearLogs.filter((w) => w.garmentIds.length > 0).length}</strong>
-                <small>days recorded</small>
+            <div className="history-stat">
+              <span>{t('Таны шүүгээний хэрэглээ', 'Your wardrobe in use')}</span>
+              <div className="history-stat-value">
+                <strong>{loggedDays}</strong>
+                <small>
+                  {t('өдөр тэмдэглэсэн', loggedDays === 1 ? 'day logged' : 'days logged')}
+                </small>
               </div>
               <button className="text-link" onClick={() => setTab('wear')}>
-                Open your wear journal <ArrowUpRight size={15} />
+                {t('Өмссөн бүртгэлээ нээх', 'Open your wear log')} <ArrowRight size={16} />
               </button>
             </div>
           </div>
           <div className="sample-insights-note">
             <Info size={16} />
             <p>
-              You’re exploring sample style insights. These scores are illustrative and aren’t an
-              assessment of your photos.
+              {t(
+                'Та жишээ стилийн үнэлгээ үзэж байна. Эдгээр оноо нь зөвхөн жишээ бөгөөд таны зургийн үнэлгээ биш.',
+                'You’re viewing sample style analyses. These scores are illustrative, not an assessment of your photos.',
+              )}
             </p>
           </div>
-          <div className="section-heading">
-            <div>
-              <h2>A look back.</h2>
-              <p className="muted">Small discoveries. A more confident you.</p>
-            </div>
-            <span className="muted">{analyses.length} looks</span>
+          <div className="section-heading analysis-heading">
+            <h2>{t('Үнэлсэн хослолууд', 'Rated outfits')}</h2>
+            <span className="meta">
+              {t(
+                `${analyses.length} хослол`,
+                `${analyses.length} ${analyses.length === 1 ? 'outfit' : 'outfits'}`,
+              )}
+            </span>
           </div>
           <div className="analysis-grid">
             {analyses.map((a) => (
-              <button key={a.id} className="analysis-card card" onClick={() => setAnalysis(a)}>
+              <button key={a.id} className="analysis-card" onClick={() => setAnalysis(a)}>
                 <div className="analysis-image">
                   <img loading="lazy" decoding="async" src={a.image} alt={a.title} />
                   <span className="analysis-score">
                     {a.overall ?? '—'}
-                    <small>{a.overall !== null ? '/100' : 'Partial'}</small>
+                    <small>
+                      {a.overall !== null ? ' / 100' : t(' · Хэсэгчилсэн', ' · Partial')}
+                    </small>
                   </span>
                   <span className="analysis-sample">
-                    {a.sample ? 'Sample look' : 'Photo analysis'}
+                    {a.sample
+                      ? t('Жишээ хослол', 'Sample look')
+                      : t('Зургийн үнэлгээ', 'Photo analysis')}
                   </span>
                 </div>
                 <div className="analysis-content">
-                  <span>
-                    {displayDate(a.date, { weekday: 'short', month: 'short', day: 'numeric' })}
-                  </span>
+                  <span>{formatDate(a.date, 'weekday')}</span>
                   <h3>{a.title}</h3>
                   <span className="analysis-view">
-                    Explore this look <ArrowUpRight size={16} />
+                    {t('Энэ хослолыг үзэх', 'Explore this look')} <ArrowUpRight size={16} />
                   </span>
                 </div>
               </button>
@@ -196,37 +222,45 @@ export function History() {
           </div>
           {analyses.length === 0 && (
             <div className="empty-state">
-              <Clock3 size={30} />
-              <h3>A fresh chapter.</h3>
-              <p>No analyses in this date range. Try a longer view.</p>
+              <Clock size={28} />
+              <h3>{t('Үнэлгээ алга', 'No analyses')}</h3>
+              <p>
+                {t(
+                  'Энэ хугацаанд үнэлгээ хийгдээгүй. Илүү урт хугацаа сонгоно уу.',
+                  'No analyses in this date range. Try a longer view.',
+                )}
+              </p>
             </div>
           )}
         </>
       ) : (
         <div className="wear-journal-layout">
-          <section className="card wear-calendar">
+          <section
+            className="wear-calendar"
+            aria-label={t('Өмссөн бүртгэлийн хуанли', 'Wear log calendar')}
+          >
             <div className="calendar-heading">
-              <h2>{month.toLocaleDateString('en', { month: 'long', year: 'numeric' })}</h2>
+              <h2>{formatDate(month, 'month')}</h2>
               <div>
                 <button
                   className="icon-button"
-                  aria-label="Previous month"
+                  aria-label={t('Өмнөх сар', 'Previous month')}
                   onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))}
                 >
-                  <ChevronLeft size={18} />
+                  <CaretLeft size={18} />
                 </button>
                 <button
                   className="icon-button"
-                  aria-label="Next month"
+                  aria-label={t('Дараагийн сар', 'Next month')}
                   onClick={() => setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))}
                 >
-                  <ChevronRight size={18} />
+                  <CaretRight size={18} />
                 </button>
               </div>
             </div>
             <div className="calendar-weekdays">
-              {['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((d, i) => (
-                <span key={i}>{d}</span>
+              {calendar.slice(0, 7).map((d) => (
+                <span key={d.key}>{weekdayShort(d.key)}</span>
               ))}
             </div>
             <div className="calendar-days">
@@ -239,7 +273,7 @@ export function History() {
                     key={d.key}
                     className={`${!d.inMonth ? 'other-month' : ''} ${d.key === date ? 'selected' : ''} ${d.key === localDate() ? 'today' : ''}`}
                     onClick={() => setDate(d.key)}
-                    aria-label={`${displayDate(d.key)}, ${hasWear ? 'outfit recorded' : 'no outfit recorded'}`}
+                    aria-label={`${formatDate(d.key)}, ${hasWear ? t('хослол тэмдэглэсэн', 'outfit logged') : t('хослол тэмдэглээгүй', 'no outfit logged')}`}
                     aria-pressed={d.key === date}
                   >
                     <span>{d.day}</span>
@@ -250,7 +284,7 @@ export function History() {
             </div>
             <div className="calendar-legend">
               <span>
-                <i /> Outfit recorded
+                <i /> {t('Хослол тэмдэглэсэн', 'Outfit logged')}
               </span>
               <button
                 className="text-link"
@@ -259,28 +293,28 @@ export function History() {
                   setMonth(new Date(new Date().getFullYear(), new Date().getMonth(), 1));
                 }}
               >
-                Back to today
+                {t('Өнөөдөр рүү буцах', 'Back to today')}
               </button>
             </div>
             <div className="wear-note">
               <Info size={16} />
               <p>
-                Only outfits you explicitly record appear in your wear journal. Your initial
-                workspace includes three sample entries.
+                {t(
+                  'Өмссөн бүртгэлд зөвхөн таны тэмдэглэсэн хослол харагдана. Жишээ орчинд хэдэн жишээ өдөр урьдчилан орсон байгаа.',
+                  'Your wear log shows only the outfits you log. The sample workspace comes with a few sample days already filled in.',
+                )}
               </p>
             </div>
           </section>
           <section className="card journal-day">
             <div className="section-heading">
               <div>
-                <p className="eyebrow">
-                  {date === localDate()
-                    ? 'TODAY'
-                    : displayDate(date, { weekday: 'long' }).toUpperCase()}
+                <p className="overline">
+                  {date === localDate() ? t('Өнөөдөр', 'Today') : weekdayName(date)}
                 </p>
-                <h2>{displayDate(date)}</h2>
+                <h2>{formatDate(date)}</h2>
               </div>
-              <span className="badge">{selectedPieces.length} pieces</span>
+              <span className="badge">{pieceCount(selectedPieces.length)}</span>
             </div>
             {selectedPieces.length ? (
               <>
@@ -290,40 +324,46 @@ export function History() {
                       <img loading="lazy" decoding="async" src={g.image} alt={g.name} />
                       <div>
                         <strong>{g.name}</strong>
-                        <span>{g.color}</span>
+                        <span>{colorLabel(g.color)}</span>
                       </div>
                       <Check size={16} />
                     </div>
                   ))}
                 </div>
                 <button className="button secondary" onClick={() => startLog()}>
-                  Edit this day’s outfit
+                  {t('Энэ өдрийн хослолыг засах', 'Edit this day’s outfit')}
                 </button>
                 <p className="feature-footnote">
-                  Recorded by you or included in your sample workspace.
+                  {t(
+                    'Таны тэмдэглэсэн эсвэл жишээ орчинд багтсан.',
+                    'Logged by you or included in the sample workspace.',
+                  )}
                 </p>
               </>
             ) : (
               <div className="journal-empty">
-                <span>
-                  <Shirt size={32} strokeWidth={1.3} />
-                </span>
                 <h3>
                   {date > localDate()
-                    ? 'A little room for possibility.'
-                    : 'What felt like you that day?'}
+                    ? t('Энэ өдөр хараахан ирээгүй', 'This day hasn’t come yet')
+                    : t('Тэр өдөр танд юу зохисон бэ?', 'What felt like you that day?')}
                 </h3>
                 <p>
                   {date > localDate()
-                    ? 'Come back on this date to record what you actually wore.'
-                    : 'Keep a memory of the pieces you wore. No photo needed.'}
+                    ? t(
+                        'Энэ өдөр болохоор эргэн ирж, өмссөн хувцсаа тэмдэглээрэй.',
+                        'Come back on this date to log what you actually wore.',
+                      )
+                    : t(
+                        'Өмссөн хувцсаа дурсамж болгон тэмдэглээрэй. Зураг шаардлагагүй.',
+                        'Keep a memory of the pieces you wore. No photo needed.',
+                      )}
                 </p>
                 <button
                   className="button secondary"
                   disabled={date > localDate()}
                   onClick={() => startLog()}
                 >
-                  <Plus size={16} /> Record an outfit
+                  <Plus size={16} /> {t('Хослол тэмдэглэх', 'Log an outfit')}
                 </button>
               </div>
             )}
@@ -336,12 +376,18 @@ export function History() {
             <img loading="lazy" decoding="async" src={analysis.image} alt={analysis.title} />
             <div>
               <span className="badge">
-                {analysis.sample ? 'Illustrative sample' : 'Photo analysis'} ·{' '}
-                {displayDate(analysis.date)}
+                {analysis.sample
+                  ? t('Жишээ үр дүн', 'Sample result')
+                  : t('Зургийн үнэлгээ', 'Photo analysis')}{' '}
+                · {formatDate(analysis.date)}
               </span>
               <div className="analysis-detail-score">
                 <strong>{analysis.overall ?? '—'}</strong>
-                <span>{analysis.overall === null ? 'Partial analysis' : '/ 100 style score'}</span>
+                <span>
+                  {analysis.overall === null
+                    ? t('Хэсэгчилсэн үнэлгээ', 'Partial analysis')
+                    : t('/ 100 стилийн оноо', '/ 100 style score')}
+                </span>
               </div>
               <p>{analysis.note}</p>
               <div className="dimension-list">
@@ -352,7 +398,7 @@ export function History() {
                         <span>{dimensionLabels[key]}</span>
                         <strong>
                           {analysis.dimensions[key] === null
-                            ? 'Not assessed'
+                            ? t('Үнэлээгүй', 'Not rated')
                             : `${analysis.dimensions[key]} / 25`}
                         </strong>
                       </div>
@@ -367,8 +413,14 @@ export function History() {
               </div>
               <p className="feature-footnote">
                 {analysis.sample
-                  ? 'This example shows how a style assessment is presented. No AI assessment was performed on this photo in your workspace.'
-                  : 'A photo alone cannot establish physical fit or comfort.'}
+                  ? t(
+                      'Энэ жишээ нь стилийн үнэлгээ хэрхэн харагдахыг үзүүлнэ. Таны орчинд энэ зурагт AI үнэлгээ хийгдээгүй.',
+                      'This example shows how a style analysis is presented. No AI analysis was performed on this photo in your workspace.',
+                    )
+                  : t(
+                      'Зөвхөн зургаар хувцасны таарц, тав тухыг тодорхойлох боломжгүй.',
+                      'Fit and comfort can’t be judged from a photo alone.',
+                    )}
               </p>
               <button
                 className="button secondary"
@@ -377,14 +429,18 @@ export function History() {
                   navigate('studio');
                 }}
               >
-                Create a look of your own <ArrowUpRight size={16} />
+                {t('Өөрийн хослолоо бүтээх', 'Create a look of your own')} <ArrowRight size={18} />
               </button>
             </div>
           </div>
         </Dialog>
       )}
       {logging && (
-        <Dialog title="A little record of what you wore." onClose={() => setLogging(false)} wide>
+        <Dialog
+          title={t('Өмссөн хувцасныхаа товч тэмдэглэл', 'A small record of what you wore')}
+          onClose={() => setLogging(false)}
+          wide
+        >
           <form
             onSubmit={(e) => {
               e.preventDefault();
@@ -398,10 +454,13 @@ export function History() {
             }}
           >
             <p className="muted">
-              Choose the actual pieces you wore. You can revisit and edit this day anytime.
+              {t(
+                'Бодитоор өмссөн хувцсаа сонгоно уу. Энэ өдрийг хүссэн үедээ засах боломжтой.',
+                'Choose the pieces you actually wore. You can edit this day anytime.',
+              )}
             </p>
             <label className="field-label wear-date-input">
-              Date
+              {t('Огноо', 'Date')}
               <input
                 type="date"
                 className="field"
@@ -434,19 +493,34 @@ export function History() {
                   <img loading="lazy" decoding="async" src={g.image} alt="" />
                   <strong>
                     {g.name}
-                    {data.archivedGarments.some((item) => item.id === g.id) ? ' · Archived' : ''}
+                    {data.archivedGarments.some((item) => item.id === g.id)
+                      ? t(' · Архивласан', ' · Archived')
+                      : ''}
                   </strong>
                   <span className="log-piece-check">
-                    {logSelection.includes(g.id) ? <Check size={13} /> : <Plus size={13} />}
+                    {logSelection.includes(g.id) ? (
+                      <Check size={14} weight="regular" />
+                    ) : (
+                      <Plus size={14} weight="regular" />
+                    )}
                   </span>
                 </button>
               ))}
             </div>
-            {!loggablePieces.length && <p className="muted">Add a piece to your wardrobe first.</p>}
+            {!loggablePieces.length && (
+              <p className="muted">
+                {t('Эхлээд шүүгээндээ хувцас нэмнэ үү.', 'Add pieces to your wardrobe first.')}
+              </p>
+            )}
             <div className="dialog-actions">
-              <span className="muted">{logSelection.length} pieces selected</span>
+              <span className="muted">
+                {t(
+                  `${logSelection.length} хувцас сонгосон`,
+                  `${pieceCount(logSelection.length)} selected`,
+                )}
+              </span>
               <button type="button" className="button secondary" onClick={() => setLogging(false)}>
-                Cancel
+                {t('Цуцлах', 'Cancel')}
               </button>
               <button
                 className="button"
@@ -457,10 +531,10 @@ export function History() {
                   (!logSelection.length && !data.wearLogs.some((w) => w.date === logDate))
                 }
               >
-                <Check size={16} />
+                <Check size={18} />
                 {logSelection.length || !data.wearLogs.some((w) => w.date === logDate)
-                  ? 'Save wear record'
-                  : 'Clear this day'}
+                  ? t('Өмссөн бүртгэл хадгалах', 'Save to wear log')
+                  : t('Энэ өдрийг цэвэрлэх', 'Clear this day')}
               </button>
             </div>
           </form>

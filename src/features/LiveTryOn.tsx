@@ -1,18 +1,18 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
+  ArrowsClockwise,
   Camera,
+  CaretRight,
   Check,
-  ChevronRight,
-  CircleHelp,
-  FlipHorizontal2,
-  LoaderCircle,
-  RefreshCw,
+  CircleNotch,
+  FlipHorizontal,
+  Question,
   ShieldCheck,
-  Shirt,
-  Square,
-  Video,
+  Stop,
+  TShirt,
+  VideoCamera,
   X,
-} from 'lucide-react';
+} from '@phosphor-icons/react';
 import {
   accountApi,
   apiErrorMessage,
@@ -116,7 +116,7 @@ function GarmentImage({ item }: { item: FittingRoomCandidate }) {
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [item.source, item.item_id]);
-  return url ? <img src={url} alt="" /> : <Shirt size={30} strokeWidth={1} />;
+  return url ? <img src={url} alt="" /> : <TShirt size={30} />;
 }
 
 export function LiveTryOn({ covered = false }: { covered?: boolean }) {
@@ -604,7 +604,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
           </p>
         </div>
         <span className="badge">
-          <Video size={15} /> Live fitting room
+          <VideoCamera size={15} weight="regular" /> Live fitting room
         </span>
       </div>
       <div className="live-layout">
@@ -661,7 +661,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
             {terminal(state.phase) && (
               <div className="live-camera-empty">
                 <div className="live-frame-corners">
-                  <Camera size={42} strokeWidth={1} />
+                  <Camera size={42} />
                 </div>
                 <h2>
                   Your fitting room,
@@ -681,7 +681,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
             )}
             {(state.phase === 'requesting-camera' || (active && !state.hasRemoteFrame)) && (
               <div className="live-connection-note" role="status">
-                <LoaderCircle size={18} className="spin" />
+                <CircleNotch size={18} className="spin" />
                 {state.phase === 'requesting-camera'
                   ? 'Waiting for camera permission…'
                   : 'Connecting your AI fitting room…'}
@@ -706,7 +706,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
           </div>
           <div className="live-camera-footer">
             <span>
-              <ShieldCheck size={15} /> No microphone. No recording.
+              <ShieldCheck size={15} weight="regular" /> No microphone. No recording.
             </span>
             <div>
               {active && state.remainingSeconds !== null && (
@@ -718,11 +718,11 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
                 disabled={!['preview', 'live'].includes(state.phase) || starting}
                 onClick={() => void camera.current?.switchCamera()}
               >
-                <FlipHorizontal2 size={19} />
+                <FlipHorizontal size={19} />
               </button>
               {(!terminal(state.phase) || starting) && (
                 <button className="button secondary small" onClick={() => stop('user_stopped')}>
-                  <Square size={13} fill="currentColor" /> Stop camera
+                  <Stop size={13} weight="fill" /> Stop camera
                 </button>
               )}
             </div>
@@ -753,18 +753,18 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
                 setReload((v) => v + 1);
               }}
             >
-              <RefreshCw size={17} />
+              <ArrowsClockwise size={17} />
             </button>
           </div>
           {!user ? (
             <div className="live-signin">
               <span>
-                <Shirt size={32} strokeWidth={1} />
+                <TShirt size={32} />
               </span>
               <h3>Your real wardrobe awaits.</h3>
               <p>Sign in to use your Oyu AI clothes and discover pieces from the catalog.</p>
               <button className="button" onClick={openAccount}>
-                Sign in to Oyu AI <ChevronRight size={16} />
+                Sign in to Oyu AI <CaretRight size={16} />
               </button>
               <small>You can check your camera first.</small>
             </div>
@@ -796,7 +796,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
                       <GarmentImage item={item} />
                       {selection[lane]?.item_id === item.item_id && (
                         <i>
-                          <Check size={13} />
+                          <Check size={13} weight="regular" />
                         </i>
                       )}
                     </span>
@@ -812,7 +812,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
                 ))}
                 {loading && (
                   <p className="live-candidate-note">
-                    <LoaderCircle className="spin" size={17} /> Finding your pieces…
+                    <CircleNotch className="spin" size={17} /> Finding your pieces…
                   </p>
                 )}
                 {!loading && !items.length && (
@@ -871,7 +871,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
                       }
                       onClick={apply}
                     >
-                      {changing ? <LoaderCircle size={16} className="spin" /> : <Shirt size={16} />}
+                      {changing ? <CircleNotch size={16} className="spin" /> : <TShirt size={16} />}
                       {changing ? 'Changing clothes…' : 'Apply selected clothes'}
                     </button>
                   </>
@@ -936,7 +936,11 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
                       }
                       onClick={() => void start()}
                     >
-                      {starting ? <LoaderCircle size={17} className="spin" /> : <Video size={17} />}
+                      {starting ? (
+                        <CircleNotch size={17} className="spin" />
+                      ) : (
+                        <VideoCamera size={17} />
+                      )}
                       {starting ? 'Starting live try-on…' : 'Start live try-on'}
                     </button>
                     {!isValidFittingRoomSelection(selection) && (
@@ -952,7 +956,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
         </aside>
       </div>
       <div className="live-bottom-note">
-        <CircleHelp size={16} />
+        <Question size={16} />
         <p>
           A moving preview to explore your style. AI can change garment details and proportions; it
           does not measure physical fit.
@@ -960,7 +964,7 @@ export function LiveTryOn({ covered = false }: { covered?: boolean }) {
       </div>
       {active && (
         <button className="live-mobile-stop" onClick={() => stop('user_stopped')}>
-          <Square size={13} fill="currentColor" /> Stop camera
+          <Stop size={13} weight="fill" /> Stop camera
           {state.remainingSeconds !== null && <span>{time(state.remainingSeconds)}</span>}
         </button>
       )}

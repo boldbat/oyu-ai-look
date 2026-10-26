@@ -9,6 +9,9 @@ export function createDecartBridge(options: {
   authorizeSession?: (idToken: string) => Promise<boolean>;
   tokenEndpoint?: string;
   streamEndpoint?: string;
+  /** Seconds per session; null (default) runs until the user stops. */
+  maxSessionSeconds?: number | null;
+  speed?: 'standard' | 'fast';
 }): {
   handleRequest(req: IncomingMessage, res: ServerResponse): boolean;
   handleUpgrade(req: IncomingMessage, socket: Duplex, head: Buffer): boolean;

@@ -18,6 +18,10 @@ export default defineConfig(({ mode }) => {
           const decart = createDecartBridge({
             apiKey: env.DECART_API_KEY,
             model: env.DECART_MODEL || 'lucy-vton-3.6',
+            maxSessionSeconds: env.DECART_MAX_SESSION_SECONDS
+              ? Number(env.DECART_MAX_SESSION_SECONDS)
+              : null,
+            speed: env.DECART_SPEED === 'fast' ? 'fast' : 'standard',
             allowedOrigins: env.PUBLIC_WEB_ORIGIN ? [new URL(env.PUBLIC_WEB_ORIGIN).origin] : [],
             allowRemote: env.DECART_DEMO_ALLOW_REMOTE === 'true',
           });
@@ -34,6 +38,9 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
+    // Oyu's pose model is imported lazily; bundling it up front avoids a one-time page reload
+    // (and a lost try-on selection) the first time the camera opens in development.
+    optimizeDeps: { include: ['@mediapipe/tasks-vision'] },
     server: {
       port: 5174,
       strictPort: true,

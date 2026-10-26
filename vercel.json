@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/live.mjs": { "maxDuration": 120 }
+    "api/live.mjs": { "maxDuration": 300 }
   },
   "rewrites": [{ "source": "/__lookluxe/decart/status", "destination": "/api/live" }],
   "headers": [
