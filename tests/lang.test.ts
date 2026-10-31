@@ -192,21 +192,67 @@ describe('Oyu across a language switch', () => {
 });
 
 describe('Oyu’s voice', () => {
-  it('picks a warm voice for the language, or none', async () => {
-    const { pickVoice, spoken } = await import('../src/lib/oyu-voice');
-    const voices = [
-      { name: 'Fred', lang: 'en-US', localService: true },
-      { name: 'Google UK English Female', lang: 'en-GB', localService: false },
-      { name: 'Samantha', lang: 'en-US', localService: true },
-      { name: 'Thomas', lang: 'fr-FR', localService: true },
-    ];
-    expect(pickVoice(voices, 'en')?.name).toBe('Samantha');
-    expect(pickVoice(voices.slice(0, 2), 'en')?.name).toBe('Google UK English Female');
-    expect(pickVoice([voices[0]], 'en')?.name).toBe('Fred');
-    expect(pickVoice(voices, 'mn')).toBeNull();
-    expect(pickVoice([{ name: 'Mongolian', lang: 'mn-MN', localService: true }], 'mn')?.name).toBe(
-      'Mongolian',
+  /** What Safari lists on a Mac with only the built-in voices. */
+  const mac = [
+    { name: 'Samantha', lang: 'en-US', voiceURI: 'com.apple.voice.compact.en-US.Samantha' },
+    { name: 'Albert', lang: 'en-US', voiceURI: 'com.apple.speech.synthesis.voice.Albert' },
+    { name: 'Fred', lang: 'en-US', voiceURI: 'com.apple.speech.synthesis.voice.Fred' },
+    { name: 'Kathy', lang: 'en-US', voiceURI: 'com.apple.speech.synthesis.voice.Kathy' },
+    { name: 'Superstar', lang: 'en-US', voiceURI: 'com.apple.speech.synthesis.voice.Princess' },
+    { name: 'Daniel', lang: 'en-GB', voiceURI: 'com.apple.voice.super-compact.en-GB.Daniel' },
+    { name: 'Karen', lang: 'en-AU', voiceURI: 'com.apple.voice.super-compact.en-AU.Karen' },
+    { name: 'Thomas', lang: 'fr-FR', voiceURI: 'com.apple.voice.compact.fr-FR.Thomas' },
+  ].map((voice) => ({ ...voice, localService: true }));
+
+  it('only uses female voices, most natural first', async () => {
+    const { voicesFor } = await import('../src/lib/oyu-voice');
+    expect(voicesFor(mac, 'en').map((voice) => voice.name)).toEqual(['Samantha', 'Karen', 'Kathy']);
+    expect(voicesFor(mac, 'mn')).toEqual([]);
+  });
+  it('prefers neural, premium and Google voices over the built-in ones', async () => {
+    const { pickVoice } = await import('../src/lib/oyu-voice');
+    const ava = { name: 'Ava', lang: 'en-US', localService: true };
+    expect(
+      pickVoice([...mac, { ...ava, voiceURI: 'com.apple.voice.premium.en-US.Ava' }], 'en')?.name,
+    ).toBe('Ava');
+    expect(pickVoice([...mac, { ...ava, name: 'Zoe (Enhanced)' }], 'en')?.name).toBe(
+      'Zoe (Enhanced)',
     );
+    const chrome = [
+      { name: 'Google UK English Male', lang: 'en-GB', localService: false },
+      { name: 'Google UK English Female', lang: 'en-GB', localService: false },
+      { name: 'Google US English', lang: 'en-US', localService: false },
+    ];
+    expect(pickVoice([...mac, ...chrome], 'en')?.name).toBe('Google US English');
+    expect(pickVoice([...mac, chrome[0], chrome[1]], 'en')?.name).toBe('Google UK English Female');
+    const edge = [
+      'Microsoft Andrew Online (Natural) - English (United States)',
+      'Microsoft Ana Online (Natural) - English (United States)',
+      'Microsoft Sonia Online (Natural) - English (United Kingdom)',
+      'Microsoft Ava Online (Natural) - English (United States)',
+    ].map((name) => ({
+      name,
+      lang: name.includes('Kingdom') ? 'en-GB' : 'en-US',
+      localService: false,
+    }));
+    expect(pickVoice([...mac, ...edge], 'en')?.name).toBe(edge[3].name);
+    const mongolian = ['Bataa', 'Yesui'].map((who) => ({
+      name: `Microsoft ${who} Online (Natural) - Mongolian (Mongolia)`,
+      lang: 'mn-MN',
+      localService: false,
+    }));
+    expect(pickVoice([...mac, ...mongolian], 'mn')?.name).toBe(mongolian[1].name);
+  });
+  it('uses the voice the user chose, while the device still has it', async () => {
+    const { pickVoice } = await import('../src/lib/oyu-voice');
+    expect(pickVoice(mac, 'en', 'Karen')?.name).toBe('Karen');
+    expect(pickVoice(mac, 'en', 'Gone')?.name).toBe('Samantha');
+    // A male voice is never hers, even when named.
+    expect(pickVoice(mac, 'en', 'Fred')?.name).toBe('Samantha');
+    expect(pickVoice([mac[2]], 'en')).toBeNull();
+  });
+  it('reads her lines without the punctuation', async () => {
+    const { spoken } = await import('../src/lib/oyu-voice');
     expect(spoken('My pick: “Navy blazer” — try it')).toBe('My pick: Navy blazer, try it');
   });
 });

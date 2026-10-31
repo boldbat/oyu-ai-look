@@ -47,7 +47,11 @@ Oyu is meant to be noticed without getting in the way:
 - **Live stage:** she stands in a soft spotlight, tilts while she thinks, and bobs as if talking while her words type in. Hearts float up for a piece she loves (9.0 and above). On the idle stage she waves when she appears.
 - **Reduced motion:** with the system setting on, none of this moves. Her text appears whole and no hearts are shown.
 
-**Her voice** is optional and off by default: **Settings → Oyu stylist → Oyu’s voice**, or the speaker button on the live stage. She reads her live try-on lines aloud with the browser's own speech (nothing is sent anywhere), preferring warm voices such as Samantha or Ava on a Mac, Google's on Chrome, and Aria or Jenny on Windows. Browsers ship English voices but rarely a Mongolian one, so in Mongolian the switch explains this and the speaker button stays hidden unless the device has a Mongolian voice. If speech ever fails, she simply stays silent.
+**Her voice** is optional and off by default: **Settings → Oyu stylist → Oyu’s voice**, or the speaker button on the live stage. With the voice on, Settings lists her voices with a **Listen** button and remembers the one you pick on this device.
+
+**Human voice (ElevenLabs).** With `ELEVENLABS_API_KEY` in `.env.local` she speaks in a natural human voice, in Mongolian as well as English. The key stays on the server (`server/voice-bridge.mjs`); the browser sends only the line she is about to say, never camera images. The server offers the account's female voices (and any voice the account made for her, preferring one named “Oyu”), uses the newest model the account can use (`eleven_v4_turbo`, then `eleven_v4`, then `eleven_v3`), remembers lines she has already said so a repeat costs nothing, caps new lines at 40 a minute, and answers only this machine unless `ELEVENLABS_ALLOW_REMOTE=true`. Browsers play sound only after the user has tapped or pressed a key on the page; every try-on starts with a tap, so she is heard from her first reaction. If ElevenLabs fails (no credits, no network), the browser's voice reads her lines for the next minute.
+
+**Browser voice.** Without a key she uses the browser's own speech (nothing is sent anywhere), at the voice's natural pitch and an unhurried pace. Only female voices are offered (male, child and novelty voices are filtered out), most natural first: neural voices (Edge's "Online (Natural)"), Apple's downloadable Premium and Enhanced voices, Google's voices in Chrome, then the built-in ones such as Samantha. A Mac without downloads has only Apple's basic compact voices, which sound synthetic; download **Ava (Premium)** or **Zoe (Premium)** for free in System Settings → Accessibility → Spoken Content → System voice → Manage Voices…, reload, and Oyu uses it automatically. Settings shows this tip when only basic voices are available. Browsers ship English voices but rarely a Mongolian one, so in Mongolian the switch explains this and the speaker button stays hidden unless the device has a Mongolian voice. If speech ever fails, she simply stays silent.
 
 **Language:** every line Oyu says is written in both languages at the moment she says it, with the same wording. Switching language re-renders the line on screen, the session summary and her panel messages, and pieces are named in the current language (`nameOf`).
 
@@ -77,6 +81,7 @@ npm run rehearse                  # desktop
 npm run rehearse -- --width 390   # phone size
 npm run rehearse -- --headed      # watch it
 npm run rehearse -- --lang en     # in English
+npm run rehearse -- --voice       # with her voice on (a silent stand-in for ElevenLabs)
 ```
 
 The script opens the try-on page in a test browser whose camera shows a person, answers the session request in the browser and stands in for Decart with an in-page video peer, so it costs nothing and contacts no provider. It checks Oyu's greeting and guidance, that she sees the person, the live video, her reaction and score, a suggestion applied in one tap, the score card, the summary, the browser console and that Decart was never contacted. It prints a checklist, saves screenshots to a temporary folder and exits non-zero if anything fails. It uses Playwright's Chromium if installed (`npx playwright-core install chromium`), or the installed Google Chrome.
@@ -91,6 +96,7 @@ It does not replace one short real session before presenting: Decart's video, th
 | `src/lib/oyu-vision.ts`                         | Pose model loading, frame reading and the event tracker        |
 | `src/lib/oyu-settings.ts`                       | Per-device switches shared between Settings and the pages      |
 | `src/lib/oyu-voice.ts`                          | Her optional voice: choosing a voice, speaking, falling silent |
+| `server/voice-bridge.mjs`                       | Her human voice: the server-side ElevenLabs route              |
 | `src/components/Oyu.tsx`, `oyu.css`             | Figure, score, notes and the floating companion panel          |
 | `src/features/OyuLive.tsx`                      | Oyu on the live try-on stage                                   |
 | `public/assets/oyu/`                            | The three poses (hello, happy, thinking) and the welcome image |

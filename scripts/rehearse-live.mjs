@@ -12,6 +12,7 @@
  *   npm run rehearse -- --width 390   phone size
  *   npm run rehearse -- --headed      watch it run
  *   npm run rehearse -- --lang en     the English interface
+ *   npm run rehearse -- --voice       Oyu speaks, through a silent stand-in for ElevenLabs
  *   npm run rehearse -- --url http://127.0.0.1:5174
  */
 import {
@@ -37,6 +38,7 @@ const url = option('url', 'http://127.0.0.1:5174').replace(/\/$/, '');
 const width = Number(option('width', '1440'));
 const headed = args.includes('--headed');
 const english = option('lang', 'mn') === 'en';
+const voice = args.includes('--voice');
 /** What Oyu says at each checked step, in the rehearsed language. */
 const expect = english
   ? { preview: 'Your camera’s on', framed: 'I can see all of you' }
@@ -224,6 +226,49 @@ await page.routeWebSocket(/\/__lookluxe\/decart\/stream/, (socket) => {
   setTimeout(() => socket.send(JSON.stringify({ type: 'ready', continuous: true })), 150);
 });
 
+/** A WAV of silence: the stand-in for ElevenLabs answers every line with it. */
+function silence(seconds) {
+  const bytes = Math.round(seconds * 24_000) * 2;
+  const wav = Buffer.alloc(44 + bytes);
+  wav.write('RIFF', 0);
+  wav.writeUInt32LE(36 + bytes, 4);
+  wav.write('WAVEfmt ', 8);
+  wav.writeUInt32LE(16, 16);
+  wav.writeUInt16LE(1, 20);
+  wav.writeUInt16LE(1, 22);
+  wav.writeUInt32LE(24_000, 24);
+  wav.writeUInt32LE(48_000, 28);
+  wav.writeUInt16LE(2, 32);
+  wav.writeUInt16LE(16, 34);
+  wav.write('data', 36);
+  wav.writeUInt32LE(bytes, 40);
+  return wav;
+}
+/** With --voice: Oyu's voice is on and her human voice comes from the stand-in. */
+const voiceLines = [];
+if (voice) {
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('oyu.settings.v1'))
+      localStorage.setItem('oyu.settings.v1', JSON.stringify({ voice: true }));
+    window.__voice = { played: 0, browser: 0 };
+    // Count what would be heard instead of making a sound.
+    AudioBufferSourceNode.prototype.start = function () {
+      window.__voice.played++;
+    };
+    speechSynthesis.speak = () => window.__voice.browser++;
+  });
+  await page.route('**/__lookluxe/voice/status', (route) =>
+    route.fulfill({ json: { configured: true } }),
+  );
+  await page.route('**/__lookluxe/voice/voices', (route) =>
+    route.fulfill({ json: { voices: [{ id: 'RehearsalVoice00', name: 'Rehearsal', about: '' }] } }),
+  );
+  await page.route('**/__lookluxe/voice/speak', (route) => {
+    voiceLines.push(JSON.parse(route.request().postData()).text);
+    return route.fulfill({ body: silence(0.4), contentType: 'audio/wav' });
+  });
+}
+
 const bubble = page.locator('.oyu-bubble:not(.is-thinking)').first();
 const say = () => bubble.innerText({ timeout: 300 }).catch(() => '');
 async function waitFor(test, timeout) {
@@ -237,7 +282,7 @@ async function waitFor(test, timeout) {
 const shot = (name) => page.screenshot({ path: join(out, `${name}.png`) });
 
 console.log(
-  `Oyu live try-on rehearsal · ${url} · ${width}px · ${english ? 'English' : 'Mongolian'} · screenshots: ${out}\n`,
+  `Oyu live try-on rehearsal · ${url} · ${width}px · ${english ? 'English' : 'Mongolian'}${voice ? ' · voice' : ''} · screenshots: ${out}\n`,
 );
 try {
   await page.goto(`${url}/#live`, { waitUntil: 'networkidle', timeout: 20_000 });
@@ -338,6 +383,15 @@ if (live) {
     await waitFor(async () => (await page.locator('.pitch-oyu-picks button').count()) >= 2, 4_000),
   );
   await shot('6-summary');
+}
+if (voice) {
+  const heard = await page.evaluate(() => window.__voice);
+  const inLanguage = voiceLines.every((line) => /[А-Яа-яӨөҮү]/.test(line) !== english);
+  check(
+    'Oyu speaks her lines in her human voice',
+    voiceLines.length >= 3 && heard.played >= 3 && heard.browser === 0 && inLanguage,
+    `${voiceLines.length} lines, ${heard.played} played`,
+  );
 }
 check('No errors in the browser console', errors.length === 0, errors.slice(0, 2).join(' | '));
 check('Decart was never contacted', decartRequests === 0);

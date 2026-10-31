@@ -8,6 +8,7 @@ import {
   Laptop,
   Moon,
   PersonSimpleWalk,
+  Play,
   ShieldCheck,
   SpeakerHigh,
   Sun,
@@ -20,7 +21,7 @@ import { CloudPreferences } from './CloudPreferences';
 import { Switch } from '../components/Switch';
 import { oyuPose } from '../lib/oyu';
 import { setOyuSettings, useOyuSettings } from '../lib/oyu-settings';
-import { speak, useVoiceReady } from '../lib/oyu-voice';
+import { speak, useHumanVoices, useVoices, voiceQuality } from '../lib/oyu-voice';
 import { t } from '../lib/lang';
 import './settings.css';
 export function Settings() {
@@ -28,7 +29,21 @@ export function Settings() {
   const [name, setName] = useState(data.preferences.name);
   const [resetOpen, setResetOpen] = useState(false);
   const oyu = useOyuSettings();
-  const voiceReady = useVoiceReady(data.preferences.language);
+  const humanVoices = useHumanVoices();
+  const browserVoices = useVoices(data.preferences.language);
+  const voiceReady = !!humanVoices || browserVoices.length > 0;
+  /** The voice in use: the user's choice while it is still offered, else the best one. */
+  const chosenVoice = humanVoices
+    ? (humanVoices.find((v) => v.id === oyu.voiceId) ?? humanVoices[0]).id
+    : (browserVoices.find((v) => v.name === oyu.voiceName) ?? browserVoices[0])?.name;
+  const hearVoice = () =>
+    speak(
+      t(
+        'Сайн байна уу! Би Oyu, таны стилист. Энэ хар хөх пиджак танд үнэхээр зохиж байна!',
+        'Hi! I’m Oyu, your stylist. That navy blazer really suits you!',
+      ),
+      data.preferences.language,
+    );
   useEffect(() => setName(data.preferences.name), [data.preferences.name]);
   const exportData = () => {
     const blob = new Blob(
@@ -289,15 +304,20 @@ export function Settings() {
                 <div>
                   <h3>{t('Oyu-гийн дуу хоолой', 'Oyu’s voice')}</h3>
                   <p>
-                    {voiceReady
+                    {humanVoices
                       ? t(
-                          'Шууд өмсөж үзэх үед хэлсэн үгээ чангаар уншина. Хөтчийн өөрийн дуу хоолойг ашиглана.',
-                          'Reads her live try-on lines aloud, using your browser’s own voice.',
+                          'Шууд өмсөж үзэх үед хэлсэн үгээ хүний жинхэнэ дуу хоолойгоор чангаар уншина. Зөвхөн түүний хэлэх үг ElevenLabs руу илгээгдэнэ, камерын дүрс хэзээ ч биш.',
+                          'Reads her live try-on lines aloud in a natural, human voice. Only her words are sent to ElevenLabs to be spoken, never your camera.',
                         )
-                      : t(
-                          'Энэ хөтөчид монгол дуу хоолой алга. Англи хэл дээр Oyu чангаар ярьж чадна.',
-                          'This browser has no voice for this language yet.',
-                        )}
+                      : voiceReady
+                        ? t(
+                            'Шууд өмсөж үзэх үед хэлсэн үгээ чангаар уншина. Хөтчийн өөрийн дуу хоолойг ашиглана.',
+                            'Reads her live try-on lines aloud, using your browser’s own voice.',
+                          )
+                        : t(
+                            'Энэ хөтөчид монгол дуу хоолой алга. Англи хэл дээр Oyu чангаар ярьж чадна.',
+                            'This browser has no voice for this language yet.',
+                          )}
                   </p>
                 </div>
                 <Switch
@@ -307,14 +327,68 @@ export function Settings() {
                   onChange={(voice) => {
                     setOyuSettings({ voice });
                     // A short hello, so the user hears what they turned on.
-                    if (voice)
-                      speak(
-                        t('Сайн байна уу! Би Oyu.', 'Hi! I’m Oyu, your stylist.'),
-                        data.preferences.language,
-                      );
+                    if (voice) hearVoice();
                   }}
                 />
               </div>
+              {oyu.live && oyu.voice && voiceReady && (
+                <div className="setting-line setting-voice">
+                  <span className="setting-icon" aria-hidden="true" />
+                  <div>
+                    <label className="setting-voice-label" htmlFor="oyu-voice-choice">
+                      {t('Дуу хоолой сонгох', 'Choose her voice')}
+                    </label>
+                    <div className="setting-voice-pick">
+                      <select
+                        id="oyu-voice-choice"
+                        className="field"
+                        value={chosenVoice}
+                        onChange={(event) => {
+                          setOyuSettings(
+                            humanVoices
+                              ? { voiceId: event.target.value }
+                              : { voiceName: event.target.value },
+                          );
+                          hearVoice();
+                        }}
+                      >
+                        {humanVoices
+                          ? humanVoices.map((voice) => (
+                              <option key={voice.id} value={voice.id}>
+                                {voice.about && !voice.name.includes(' - ')
+                                  ? `${voice.name} · ${voice.about}`
+                                  : voice.name}
+                              </option>
+                            ))
+                          : browserVoices.map((voice) => (
+                              <option key={voice.name} value={voice.name}>
+                                {voice.name}
+                              </option>
+                            ))}
+                      </select>
+                      <button type="button" className="button secondary small" onClick={hearVoice}>
+                        <Play size={16} /> {t('Сонсох', 'Listen')}
+                      </button>
+                    </div>
+                    <p>
+                      {humanVoices
+                        ? t(
+                            'ElevenLabs-ийн хүний дуу хоолой. Сонсох товчоор харьцуулж сонгоорой.',
+                            'Human voices by ElevenLabs. Press Listen to compare them.',
+                          )
+                        : voiceQuality(browserVoices[0]) >= 70
+                          ? t(
+                              'Хамгийн байгалийн сонсогддогийг эхэнд нь жагсаасан.',
+                              'The most natural-sounding voices are listed first.',
+                            )
+                          : t(
+                              'Энэ төхөөрөмжид зөвхөн энгийн дуу хоолой байна. Mac дээр System Settings → Accessibility → Spoken Content → System voice → Manage Voices… хэсгээс “Ava (Premium)” эсвэл “Zoe (Premium)”-г үнэгүй татаж аваад хуудсаа дахин ачаалбал Oyu түүнийг автоматаар сонгоно. Chrome, Edge хөтөч ч илүү байгалийн дуу хоолойтой.',
+                              'This device only has basic voices. On a Mac, download “Ava (Premium)” or “Zoe (Premium)” for free in System Settings → Accessibility → Spoken Content → System voice → Manage Voices…, then reload: Oyu picks it automatically. Chrome and Edge also have more natural voices.',
+                            )}
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           </section>
           <CloudPreferences />

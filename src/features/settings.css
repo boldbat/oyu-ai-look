@@ -169,6 +169,30 @@
   margin: -2px -2px 0;
   object-fit: contain;
 }
+.setting-line.setting-voice {
+  align-items: flex-start;
+  padding-top: 0;
+  border-top: 0;
+}
+.setting-voice > .setting-icon {
+  width: 20px;
+}
+.setting-voice-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+.setting-voice-pick {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  max-width: 420px;
+  margin: 6px 0 2px;
+}
+.setting-line .setting-voice-pick .button {
+  min-height: 44px;
+  margin-left: 0;
+}
 .setting-icon {
   flex-shrink: 0;
   color: var(--ink-2);

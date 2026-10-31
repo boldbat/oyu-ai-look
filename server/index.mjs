@@ -4,6 +4,7 @@ import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createLiveBridge } from './live-bridge.mjs';
 import { createDecartBridge } from './decart-bridge.mjs';
+import { createVoiceBridge } from './voice-bridge.mjs';
 
 const root = fileURLToPath(new URL('../dist/', import.meta.url));
 const decart = createDecartBridge({
@@ -17,6 +18,15 @@ const decart = createDecartBridge({
     ? [new URL(process.env.PUBLIC_WEB_ORIGIN).origin]
     : [],
   allowRemote: process.env.DECART_DEMO_ALLOW_REMOTE === 'true',
+});
+const voice = createVoiceBridge({
+  apiKey: process.env.ELEVENLABS_API_KEY,
+  model: process.env.ELEVENLABS_MODEL,
+  voiceId: process.env.ELEVENLABS_VOICE_ID,
+  allowedOrigins: process.env.PUBLIC_WEB_ORIGIN
+    ? [new URL(process.env.PUBLIC_WEB_ORIGIN).origin]
+    : [],
+  allowRemote: process.env.ELEVENLABS_ALLOW_REMOTE === 'true',
 });
 const bridge = createLiveBridge({
   apiOrigin: process.env.LOOKLUXE_API_ORIGIN || process.env.VITE_API_BASE_URL,
@@ -39,7 +49,12 @@ const server = createServer(async (req, res) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(self), microphone=()');
-  if (decart.handleRequest(req, res) || bridge.handleRequest(req, res)) return;
+  if (
+    decart.handleRequest(req, res) ||
+    voice.handleRequest(req, res) ||
+    bridge.handleRequest(req, res)
+  )
+    return;
   if (!['GET', 'HEAD'].includes(req.method)) {
     res.writeHead(405);
     res.end();

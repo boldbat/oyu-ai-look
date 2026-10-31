@@ -10,23 +10,35 @@ export interface OyuSettings {
   vision: boolean;
   /** Oyu reads her live try-on lines aloud. Off until the user turns it on. */
   voice: boolean;
+  /** The browser voice the user chose for her, by name; null picks the most natural one. */
+  voiceName: string | null;
+  /** The human (ElevenLabs) voice the user chose for her; null uses the server's default. */
+  voiceId: string | null;
 }
 const KEY = 'oyu.settings.v1';
-const defaults: OyuSettings = { companion: true, live: true, vision: true, voice: false };
+const defaults: OyuSettings = {
+  companion: true,
+  live: true,
+  vision: true,
+  voice: false,
+  voiceName: null,
+  voiceId: null,
+};
 const listeners = new Set<() => void>();
 
 function read(): OyuSettings {
   try {
     const stored: unknown = JSON.parse(localStorage.getItem(KEY) ?? '{}');
-    const value = (key: keyof OyuSettings) =>
-      stored && typeof stored === 'object' && typeof (stored as OyuSettings)[key] === 'boolean'
-        ? (stored as OyuSettings)[key]
-        : defaults[key];
+    const saved = (stored && typeof stored === 'object' ? stored : {}) as Partial<OyuSettings>;
+    const value = (key: 'companion' | 'live' | 'vision' | 'voice') =>
+      typeof saved[key] === 'boolean' ? saved[key] : defaults[key];
     return {
       companion: value('companion'),
       live: value('live'),
       vision: value('vision'),
       voice: value('voice'),
+      voiceName: typeof saved.voiceName === 'string' ? saved.voiceName : null,
+      voiceId: typeof saved.voiceId === 'string' ? saved.voiceId : null,
     };
   } catch {
     return { ...defaults };
@@ -57,6 +69,8 @@ function subscribe(listener: () => void) {
     window.removeEventListener('storage', sync);
   };
 }
+/** The current settings, for code that runs outside rendering. */
+export const getOyuSettings = (): OyuSettings => current;
 export function useOyuSettings(): OyuSettings {
   return useSyncExternalStore(
     subscribe,

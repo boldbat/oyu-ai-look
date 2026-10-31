@@ -178,6 +178,9 @@ Edit `.env.local`:
 DECART_API_KEY=your_server_side_decart_key
 DECART_MODEL=lucy-vton-3.6
 
+# Optional: Oyu's human voice (ElevenLabs). Without it she uses the browser's voice.
+ELEVENLABS_API_KEY=your_server_side_elevenlabs_key
+
 # Optional original API root, without /v1; leave empty if unavailable.
 LOOKLUXE_API_ORIGIN=http://127.0.0.1:8000
 ```
@@ -207,6 +210,10 @@ The production server also defaults to port 5174. Stop the development server fi
 | -------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `DECART_API_KEY`           | Server-only provider credential; empty disables provider session creation.           | Development startup / production runtime.                    |
 | `DECART_MODEL`             | Defaults to `lucy-vton-3.6`.                                                         | Development startup / production runtime.                    |
+| `ELEVENLABS_API_KEY`       | Server-only key for Oyu's human voice; empty keeps the browser's own voice.          | Development startup / production runtime.                    |
+| `ELEVENLABS_VOICE_ID`      | Optional default voice; otherwise a warm female voice from the account.              | Development startup / production runtime.                    |
+| `ELEVENLABS_MODEL`         | Optional; by default the newest of `eleven_v4_turbo`, `eleven_v4`, `eleven_v3`.      | Development startup / production runtime.                    |
+| `ELEVENLABS_ALLOW_REMOTE`  | Permits remote voice requests when `true`; loopback only by default.                 | Development startup / production runtime.                    |
 | `LOOKLUXE_API_ORIGIN`      | Optional original backend root, without `/v1`.                                       | Development startup, frontend build, and production runtime. |
 | `VITE_API_BASE_URL`        | Legacy fallback for the original backend origin. Prefer `LOOKLUXE_API_ORIGIN`.       | Development startup, frontend build, and production runtime. |
 | `HOST`                     | Production listener; defaults to `127.0.0.1`. Use `0.0.0.0` on Cloud Run.            | Production runtime.                                          |
@@ -415,18 +422,18 @@ docs/                      Design, backend, transport, and verification notes
 public/                    Static assets
 ```
 
-| Command                  | Purpose                                                                            |
-| ------------------------ | ---------------------------------------------------------------------------------- |
-| `npm run dev`            | Start Vite with gateway middleware.                                                |
-| `npm run typecheck`      | Check TypeScript project types.                                                    |
-| `npm run test:firebase`  | Run the isolated Firestore rules tests (Java 21+).                                 |
-| `npm run firebase:rules` | Deploy reviewed rules to `oyu-i-look`.                                             |
-| `npm test`               | Run the Vitest suite.                                                              |
-| `npm run rehearse`       | Free live try-on rehearsal with Oyu (app running); add `-- --lang en` for English. |
-| `npm run build`          | Type-check and build the frontend.                                                 |
-| `npm start`              | Serve the built app and backend gateways.                                          |
-| `npm run preview`        | Alias for the production Node.js server.                                           |
-| `npm run format`         | Format source, tests, and documentation.                                           |
+| Command                  | Purpose                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`            | Start Vite with gateway middleware.                                                                                   |
+| `npm run typecheck`      | Check TypeScript project types.                                                                                       |
+| `npm run test:firebase`  | Run the isolated Firestore rules tests (Java 21+).                                                                    |
+| `npm run firebase:rules` | Deploy reviewed rules to `oyu-i-look`.                                                                                |
+| `npm test`               | Run the Vitest suite.                                                                                                 |
+| `npm run rehearse`       | Free live try-on rehearsal with Oyu (app running); add `-- --lang en` for English, `-- --voice` to include her voice. |
+| `npm run build`          | Type-check and build the frontend.                                                                                    |
+| `npm start`              | Serve the built app and backend gateways.                                                                             |
+| `npm run preview`        | Alias for the production Node.js server.                                                                              |
+| `npm run format`         | Format source, tests, and documentation.                                                                              |
 
 ## Further documentation
 
