@@ -22,16 +22,18 @@ Oyu AI starts with the user's own wardrobe. It makes clothes easier to find, tur
 
 | Area              | Implemented experience                                                                                                                                                             |
 | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Overview          | Browse available clothing combinations, saved looks, and clearly labeled sample style summaries.                                                                                   |
-| My wardrobe       | Add images, manually confirm details, search and sort pieces, filter categories and availability, mark favorites, and manage laundry status.                                       |
+| Overview          | See the four-step "How Oyu AI works" guide, a daily outfit idea with plain-language reasons and optional layer/accessory, wardrobe counts by type, and pieces not worn in 30 days. |
+| My wardrobe       | Add images with a category, garment type and color; search and sort; filter by type, availability, favorites or "not worn in 30 days"; manage laundry; send a piece to try-on.     |
 | Archive           | Archive and restore garments while preserving references in historical wear records.                                                                                               |
-| Look Studio       | Compose outfits from available pieces, save combinations, edit looks, and remove saved looks.                                                                                      |
+| Look Studio       | Compose outfits from available pieces, get a color-harmony suggestion, save, edit and remove looks, and send a look's main piece to the live fitting room.                         |
 | Wear journal      | Record clothes actually worn on a selected date and browse the resulting history.                                                                                                  |
 | Style history     | Explore illustrative sample scores and notes, with missing dimensions represented separately from zero scores.                                                                     |
-| Live fitting room | Select a garment, enable a local camera preview, explicitly start AI try-on, change the garment during a session, switch supported cameras, and stop.                              |
+| Live fitting room | Filter garments by type, enable a local camera preview, explicitly start AI try-on, change the garment during a session, switch supported cameras, and stop.                       |
 | Preferences       | Set a display name and style preferences, choose light/dark/system appearance, export sample data as JSON, or confirm a sample reset.                                              |
 | Cloud preferences | Sign in with Google and explicitly save, load/apply, or remove your owner-only Firestore preferences.                                                                              |
 | Connected account | Use the original API for authentication, entitlement, private wardrobe workflows, saved outfits, wear logging, and consented outfit-photo analysis. Requires a configured backend. |
+
+The sample workspace contains 51 pieces across six categories (tops, bottoms, dresses, outerwear, shoes and accessories): everyday essentials plus an Old Money edit, evening wear, womenswear and menswear, with saved looks and a few weeks of wear history. Pieces are tagged Women, Men or Unisex and by style, and the Overview, Wardrobe, Look Studio and live fitting room can filter by them. Browsers that saved an earlier sample receive the current pieces automatically; their own pieces, looks and records are kept. Outfit ideas are deterministic color-harmony and style rules that never mix womenswear and menswear, not Gemini output.
 
 The interface supports desktop and mobile layouts, keyboard navigation, and dialog focus management. The current web interface is English; a complete Mongolian translation remains future work.
 
@@ -134,7 +136,9 @@ The current live video transformation is provided by Decart. Gemini would provid
 6. Choose another reference and select **Apply selected garment** to update the session.
 7. Select **Stop** to end capture, the peer connection, and signaling.
 
-The screen caps sessions at **30 seconds**, requests no microphone, and does not implement video recording. Navigation, a hidden tab, a covering app panel, connection failure, or the time cap also stops capture. There is no pointer/keyboard inactivity cutoff and no automatic reconnection.
+Sessions have **no time limit** by default: they run until **Stop**, and Decart bills per second while one runs ($0.02/s standard, $0.04/s with `DECART_SPEED=fast`). Set `DECART_MAX_SESSION_SECONDS` to cap every session. The screen requests no microphone and does not record video. Navigation, a hidden tab, a covering app panel or connection failure also stops capture. There is no pointer/keyboard inactivity cutoff and no automatic reconnection.
+
+While live, tapping any garment (in the panel or the strip on the video) switches it immediately; the latest tap wins. Each garment is sent with a region-specific prompt such as “Substitute the upper body garment with a navy knit sweater”, following Decart’s VTON prompting guide. The front camera is mirrored before it is sent, so the view behaves like a mirror. **AI try-on**, **Original** and **Side by side** views and full screen are available.
 
 | Gateway route                           | Purpose                                                              |
 | --------------------------------------- | -------------------------------------------------------------------- |
@@ -142,9 +146,17 @@ The screen caps sessions at **30 seconds**, requests no microphone, and does not
 | `POST /__lookluxe/decart/sessions`      | Validate the reference and issue a short-lived, single-use ticket.   |
 | `WS /__lookluxe/decart/stream?ticket=…` | Consume the ticket and relay provider signaling and garment changes. |
 
+**Oyu**, the companion stylist, hosts the stage: she guides framing, reacts to every piece with a score, rates on request, suggests the next piece and sums up the session. With awareness on she also sees the user through an on-device pose model (frames never leave the browser). See [Oyu, the companion stylist](docs/oyu.md); run `npm run rehearse` for a free end-to-end check before a demo.
+
 The gateway keeps provider credentials out of the browser, validates payloads and origins, and permits one active provider session per process. Selecting a reference or issuing a ticket alone does not start provider processing. See [live implementation and verification](docs/live-try-on.md).
 
 On Vercel, `GET /api/live` supplies status and `WS /api/live` receives the reference, duration, and Firebase ID token in the first encrypted message. Authorization and session creation happen on that same connection; they do not depend on an HTTP ticket reaching the same function instance. The discovery route above rewrites to this function. The function rejects unauthorized users before obtaining a Decart token.
+
+## Languages
+
+The interface speaks **Mongolian** (default) and **English**. Switch with the **MN / EN** button in the top bar or under **Settings → Харагдах байдал / Appearance**; the choice is saved with the workspace (and with cloud preferences when signed in). Oyu speaks the chosen language too, and the bundled sample wardrobe, looks and analyses appear in English in English mode without changing what is stored. Style names (Old money, Minimal…) stay English in both, and the try-on prompts sent to Decart are always English.
+
+Every interface string sits in the code as a pair, `t('Монгол', 'English')` from `src/lib/lang.ts`; label tables use `localized({ key: ['Монгол', 'English'] })`. Call `t` while rendering, never at module level. `tests/i18n-guard.test.ts` fails if any Mongolian text is missing its English pair or if `t` runs when a module loads.
 
 ## Run locally
 
@@ -165,6 +177,9 @@ Edit `.env.local`:
 ```dotenv
 DECART_API_KEY=your_server_side_decart_key
 DECART_MODEL=lucy-vton-3.6
+
+# Optional: Oyu's human voice (ElevenLabs). Without it she uses the browser's voice.
+ELEVENLABS_API_KEY=your_server_side_elevenlabs_key
 
 # Optional original API root, without /v1; leave empty if unavailable.
 LOOKLUXE_API_ORIGIN=http://127.0.0.1:8000
@@ -195,6 +210,10 @@ The production server also defaults to port 5174. Stop the development server fi
 | -------------------------- | ------------------------------------------------------------------------------------ | ------------------------------------------------------------ |
 | `DECART_API_KEY`           | Server-only provider credential; empty disables provider session creation.           | Development startup / production runtime.                    |
 | `DECART_MODEL`             | Defaults to `lucy-vton-3.6`.                                                         | Development startup / production runtime.                    |
+| `ELEVENLABS_API_KEY`       | Server-only key for Oyu's human voice; empty keeps the browser's own voice.          | Development startup / production runtime.                    |
+| `ELEVENLABS_VOICE_ID`      | Optional default voice; otherwise a warm female voice from the account.              | Development startup / production runtime.                    |
+| `ELEVENLABS_MODEL`         | Optional; by default the newest of `eleven_v4_turbo`, `eleven_v4`, `eleven_v3`.      | Development startup / production runtime.                    |
+| `ELEVENLABS_ALLOW_REMOTE`  | Permits remote voice requests when `true`; loopback only by default.                 | Development startup / production runtime.                    |
 | `LOOKLUXE_API_ORIGIN`      | Optional original backend root, without `/v1`.                                       | Development startup, frontend build, and production runtime. |
 | `VITE_API_BASE_URL`        | Legacy fallback for the original backend origin. Prefer `LOOKLUXE_API_ORIGIN`.       | Development startup, frontend build, and production runtime. |
 | `HOST`                     | Production listener; defaults to `127.0.0.1`. Use `0.0.0.0` on Cloud Run.            | Production runtime.                                          |
@@ -227,7 +246,7 @@ vercel link
 vercel deploy --prod
 ```
 
-Check `https://your-project.vercel.app/__lookluxe/decart/status` for `configured: true`, `transport: "websocket-init"`, and `requiresSignIn: true`. Open Live fitting room, sign in, choose a reference, enable the camera, and explicitly start. The 120-second function limit accommodates setup and a bounded 30-second UI session. Provider credentials stay on the server; Firebase ID tokens are sent in a WebSocket message rather than a URL.
+Check `https://your-project.vercel.app/__lookluxe/decart/status` for `configured: true`, `transport: "websocket-init"`, and `requiresSignIn: true`. Open Live fitting room, sign in, choose a reference, enable the camera, and explicitly start. Vercel ends the function at its 300-second `maxDuration` (vercel.json), so hosted sessions stop after about five minutes even though the app sets no limit; local sessions have no such ceiling. Provider credentials stay on the server; Firebase ID tokens are sent in a WebSocket message rather than a URL.
 
 This is an authorized private demo. The per-process active-session and request limits do not provide shared quotas across function instances. Public paid multi-user access still needs shared usage accounting and allowance enforcement. The optional original account proxy is provided by the standalone Node server and is not implemented by this Vercel live function.
 
@@ -362,7 +381,7 @@ Current limits:
 - Real-account sign-in and photo processing require acceptance testing against an available original backend and test account.
 - Cloud persistence currently covers preferences only. Main-workspace wardrobe synchronization and Gemini processing remain future work.
 - Sample uploads are limited to **2 MB** each and browser storage capacity. Export a copy from Settings for independent safekeeping.
-- Live references support **4 MB**; the current screen uses **30-second** sessions.
+- Live references support **4 MB**; sessions have no time limit unless `DECART_MAX_SESSION_SECONDS` is set (hosted sessions also end at the 300-second Vercel function limit).
 - Account tokens are held in memory; production session persistence needs an explicit session design.
 - Subscription checkout, dedicated photo try-on, body/fit setup, Store, Style Memory, and complete mobile parity are outside this MVP.
 - Public multi-user live operation and Google Cloud deployment have not been verified.
@@ -403,17 +422,18 @@ docs/                      Design, backend, transport, and verification notes
 public/                    Static assets
 ```
 
-| Command                  | Purpose                                            |
-| ------------------------ | -------------------------------------------------- |
-| `npm run dev`            | Start Vite with gateway middleware.                |
-| `npm run typecheck`      | Check TypeScript project types.                    |
-| `npm run test:firebase`  | Run the isolated Firestore rules tests (Java 21+). |
-| `npm run firebase:rules` | Deploy reviewed rules to `oyu-i-look`.             |
-| `npm test`               | Run the Vitest suite.                              |
-| `npm run build`          | Type-check and build the frontend.                 |
-| `npm start`              | Serve the built app and backend gateways.          |
-| `npm run preview`        | Alias for the production Node.js server.           |
-| `npm run format`         | Format source, tests, and documentation.           |
+| Command                  | Purpose                                                                                                               |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`            | Start Vite with gateway middleware.                                                                                   |
+| `npm run typecheck`      | Check TypeScript project types.                                                                                       |
+| `npm run test:firebase`  | Run the isolated Firestore rules tests (Java 21+).                                                                    |
+| `npm run firebase:rules` | Deploy reviewed rules to `oyu-i-look`.                                                                                |
+| `npm test`               | Run the Vitest suite.                                                                                                 |
+| `npm run rehearse`       | Free live try-on rehearsal with Oyu (app running); add `-- --lang en` for English, `-- --voice` to include her voice. |
+| `npm run build`          | Type-check and build the frontend.                                                                                    |
+| `npm start`              | Serve the built app and backend gateways.                                                                             |
+| `npm run preview`        | Alias for the production Node.js server.                                                                              |
+| `npm run format`         | Format source, tests, and documentation.                                                                              |
 
 ## Further documentation
 
@@ -422,6 +442,7 @@ public/                    Static assets
 - [Source audit and feature parity boundaries](docs/source-audit.md)
 - [Existing backend integration](docs/backend-integration.md)
 - [Live camera implementation and verification](docs/live-try-on.md)
+- [Oyu, the companion stylist](docs/oyu.md)
 - [Verification record](docs/verification.md)
 
 The original Flutter/FastAPI project is a separate application. This repository provides the web client and local gateway; it does not include that backend's database, workers, storage deployment, or production credentials.

@@ -6,7 +6,136 @@ import {
   parseWorkspace,
   recordWear,
   restoreGarment,
+  upgradeSample,
 } from '../src/lib/workspace';
+
+describe('sample collection upgrade', () => {
+  function legacyWorkspace() {
+    const current = makeDemo();
+    const legacy = current.garments.slice(0, 6).map(({ kind: _kind, ...g }) => ({
+      ...g,
+      image: `/assets/${g.id}.png`,
+    }));
+    return {
+      ...current,
+      garments: [
+        ...legacy,
+        { ...legacy[0], id: 'mine', name: 'My own shirt', image: 'data:image/png;base64,AAAA' },
+      ],
+      savedLooks: current.savedLooks.slice(0, 2),
+      wearLogs: [
+        ...current.wearLogs.filter((w) => ['wear-1', 'wear-2', 'wear-3'].includes(w.id)),
+        {
+          id: `wear-${current.wearLogs[1].date}`,
+          date: current.wearLogs[1].date,
+          garmentIds: ['mine'],
+        },
+      ],
+      analyses: current.analyses.map((a) => ({
+        ...a,
+        image: a.image.replace('/looks/', '/').replace('.jpg', '.png'),
+      })),
+      sampleVersion: undefined,
+    };
+  }
+
+  it('adds new sample pieces and moves sample photos without touching personal data', () => {
+    const upgraded = upgradeSample(legacyWorkspace());
+    const sample = makeDemo();
+    expect(upgraded.sampleVersion).toBe(sample.sampleVersion);
+    expect(upgraded.garments).toHaveLength(sample.garments.length + 1);
+    expect(upgraded.garments.find((g) => g.id === 'navy-top')).toMatchObject({
+      image: '/assets/wardrobe/navy-top.jpg',
+      kind: 'Long-sleeve top',
+    });
+    expect(upgraded.garments.find((g) => g.id === 'mine')?.image).toBe(
+      'data:image/png;base64,AAAA',
+    );
+    expect(upgraded.analyses.every((a) => a.image.startsWith('/assets/looks/'))).toBe(true);
+    expect(upgraded.savedLooks).toHaveLength(sample.savedLooks.length);
+    expect(upgraded.wearLogs.filter((w) => w.date === sample.wearLogs[1].date)).toEqual([
+      expect.objectContaining({ garmentIds: ['mine'] }),
+    ]);
+    expect(parseWorkspace(JSON.stringify(upgraded))).toEqual(upgraded);
+    expect(upgradeSample(upgraded)).toBe(upgraded);
+  });
+
+  it('repairs a collection saved with retired sample pieces', () => {
+    const sample = makeDemo();
+    const retired = {
+      ...sample.garments[0],
+      id: 'khaki-jacket',
+      image: '/assets/wardrobe/khaki-jacket.jpg',
+    };
+    const navy = { ...sample.garments[0], favorite: false, image: '/assets/wardrobe/old.jpg' };
+    const saved = {
+      ...sample,
+      garments: [navy, ...sample.garments.slice(1), retired],
+      savedLooks: [
+        {
+          ...sample.savedLooks[2],
+          garmentIds: ['khaki-jacket', ...sample.savedLooks[0].garmentIds],
+        },
+      ],
+      wearLogs: [
+        { ...sample.wearLogs[4], garmentIds: ['khaki-jacket'] },
+        { id: 'mine', date: sample.wearLogs[0].date, garmentIds: ['khaki-jacket', 'navy-top'] },
+      ],
+      sampleVersion: 2,
+    };
+    const upgraded = upgradeSample(saved);
+    expect(upgraded.garments.map((g) => g.id)).toEqual(sample.garments.map((g) => g.id));
+    expect(upgraded.garments[0]).toMatchObject({
+      image: sample.garments[0].image,
+      favorite: false,
+    });
+    expect(upgraded.savedLooks.find((l) => l.id === sample.savedLooks[2].id)?.garmentIds).toEqual(
+      sample.savedLooks[2].garmentIds,
+    );
+    expect(upgraded.wearLogs.find((w) => w.id === sample.wearLogs[4].id)?.garmentIds).toEqual(
+      sample.wearLogs[4].garmentIds,
+    );
+    expect(upgraded.wearLogs.find((w) => w.id === 'mine')?.garmentIds).toEqual(['navy-top']);
+    expect(parseWorkspace(JSON.stringify(upgraded))).toEqual(upgraded);
+  });
+
+  it('does not bring back sample pieces the person archived', () => {
+    const legacy = legacyWorkspace();
+    const archived = archiveGarment(legacy as never, 'navy-top');
+    const upgraded = upgradeSample(archived);
+    expect(upgraded.garments.some((g) => g.id === 'navy-top')).toBe(false);
+    expect(upgraded.archivedGarments.map((g) => g.id)).toEqual(['navy-top']);
+  });
+
+  it('moves an English sample workspace to Mongolian, keeping personal data', () => {
+    const sample = makeDemo();
+    const english = {
+      ...sample,
+      garments: [
+        { ...sample.garments[0], name: 'The everyday knit', favorite: false },
+        { ...sample.garments[1], id: 'mine', name: 'My own shirt', image: 'data:,' },
+      ],
+      savedLooks: [
+        { ...sample.savedLooks[0], name: 'Everyday, elevated' },
+        { ...sample.savedLooks[0], id: 'my-look', name: 'My look' },
+      ],
+      wearLogs: [],
+      analyses: sample.analyses.map((a) => ({ ...a, title: 'Old title', note: 'Old note' })),
+      preferences: { ...sample.preferences, name: 'Alex', language: 'en' as const },
+      sampleVersion: 3,
+    };
+    const upgraded = upgradeSample(english);
+    expect(upgraded.garments[0]).toMatchObject({ name: sample.garments[0].name, favorite: false });
+    expect(upgraded.garments.find((g) => g.id === 'mine')?.name).toBe('My own shirt');
+    expect(upgraded.savedLooks.map((l) => l.name).slice(0, 2)).toEqual([
+      sample.savedLooks[0].name,
+      'My look',
+    ]);
+    expect(upgraded.analyses.map((a) => a.title)).toEqual(sample.analyses.map((a) => a.title));
+    expect(upgraded.preferences).toMatchObject({ name: 'Alex', language: 'mn' });
+    expect(parseWorkspace(JSON.stringify(upgraded))).toEqual(upgraded);
+  });
+});
 
 describe('stored workspace validation', () => {
   it('round-trips the current shape and accepts the old shape without archives', () => {
@@ -28,6 +157,8 @@ describe('stored workspace validation', () => {
     const invalid = [
       { ...workspace, garments: [{ ...workspace.garments[0], name: 7 }] },
       { ...workspace, garments: [{ ...workspace.garments[0], category: 'unknown' }] },
+      { ...workspace, garments: [{ ...workspace.garments[0], kind: '' }] },
+      { ...workspace, sampleVersion: 'two' },
       { ...workspace, garments: [{ ...workspace.garments[0], availability: ['available'] }] },
       { ...workspace, archivedGarments: [workspace.garments[0]] },
       { ...workspace, archivedGarments: null },

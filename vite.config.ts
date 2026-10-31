@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite';
 import react from '@vitejs/plugin-react';
 import { createLiveBridge } from './server/live-bridge.mjs';
 import { createDecartBridge } from './server/decart-bridge.mjs';
+import { createVoiceBridge } from './server/voice-bridge.mjs';
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '');
   const apiOrigin = env.LOOKLUXE_API_ORIGIN || env.VITE_API_BASE_URL || '';
@@ -18,11 +19,27 @@ export default defineConfig(({ mode }) => {
           const decart = createDecartBridge({
             apiKey: env.DECART_API_KEY,
             model: env.DECART_MODEL || 'lucy-vton-3.6',
+            maxSessionSeconds: env.DECART_MAX_SESSION_SECONDS
+              ? Number(env.DECART_MAX_SESSION_SECONDS)
+              : null,
+            speed: env.DECART_SPEED === 'fast' ? 'fast' : 'standard',
             allowedOrigins: env.PUBLIC_WEB_ORIGIN ? [new URL(env.PUBLIC_WEB_ORIGIN).origin] : [],
             allowRemote: env.DECART_DEMO_ALLOW_REMOTE === 'true',
           });
+          const voice = createVoiceBridge({
+            apiKey: env.ELEVENLABS_API_KEY,
+            model: env.ELEVENLABS_MODEL,
+            voiceId: env.ELEVENLABS_VOICE_ID,
+            allowedOrigins: env.PUBLIC_WEB_ORIGIN ? [new URL(env.PUBLIC_WEB_ORIGIN).origin] : [],
+            allowRemote: env.ELEVENLABS_ALLOW_REMOTE === 'true',
+          });
           server.middlewares.use((req, res, next) => {
-            if (!decart.handleRequest(req, res) && !bridge.handleRequest(req, res)) next();
+            if (
+              !decart.handleRequest(req, res) &&
+              !voice.handleRequest(req, res) &&
+              !bridge.handleRequest(req, res)
+            )
+              next();
           });
           server.httpServer?.on('upgrade', (req, socket, head) => {
             if (!decart.handleUpgrade(req, socket, head)) bridge.handleUpgrade(req, socket, head);
@@ -34,6 +51,9 @@ export default defineConfig(({ mode }) => {
         },
       },
     ],
+    // Oyu's pose model is imported lazily; bundling it up front avoids a one-time page reload
+    // (and a lost try-on selection) the first time the camera opens in development.
+    optimizeDeps: { include: ['@mediapipe/tasks-vision'] },
     server: {
       port: 5174,
       strictPort: true,

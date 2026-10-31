@@ -1,17 +1,18 @@
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { FormEvent } from 'react';
 import {
-  Bookmark,
-  CalendarDays,
+  ArrowsClockwise,
+  BookmarkSimple,
+  CalendarBlank,
+  CaretLeft,
+  CaretRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  LoaderCircle,
+  CircleNotch,
   Plus,
-  RefreshCw,
-  Shirt,
-  Trash2,
-} from 'lucide-react';
+  TShirt,
+  Trash,
+  X,
+} from '@phosphor-icons/react';
 import { accountApi, apiErrorMessage, newOperationKey } from '../lib/api';
 import type {
   ApiGarment,
@@ -20,26 +21,88 @@ import type {
   OutfitSlot,
   WearHistory,
 } from '../lib/api';
+import { colorLabel, colorLabels, formatDate } from '../lib/i18n';
+import { localized, t } from '../lib/lang';
+import { categoryLabels } from '../lib/types';
 import { isCalendarDate } from '../lib/workspace';
 import './account-looks.css';
 
-const slotLabels: Record<OutfitSlot, string> = {
-  top: 'Top',
-  bottom: 'Bottom',
-  dress: 'Dress / deel',
-  footwear: 'Footwear',
-  mid: 'Middle layer',
-  outer: 'Outerwear',
-  accessory1: 'Accessory',
-};
+const slotLabels = localized<OutfitSlot>({
+  top: ['Цамц', 'Top'],
+  bottom: ['Өмд, банзал', 'Bottom'],
+  dress: ['Даашинз / дээл', 'Dress / deel'],
+  footwear: ['Гутал', 'Shoes'],
+  mid: ['Дунд давхарга', 'Middle layer'],
+  outer: ['Гадуур хувцас', 'Outerwear'],
+  accessory1: ['Аксессуар', 'Accessory'],
+});
 const optionalSlots: OutfitSlot[] = ['mid', 'outer', 'accessory1'];
 const humanize = (value: string) => value.replaceAll('_', ' ');
-const displayDate = (date: string) =>
-  new Date(`${date.slice(0, 10)}T12:00:00`).toLocaleDateString(undefined, {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+/** A service key’s label in the current language; unknown values are shown as sent. */
+const labelFor = (labels: Record<string, string>, value: string) => {
+  const text = humanize(value);
+  const match = Object.entries(labels).find(
+    ([key]) => humanize(key).toLowerCase() === text.toLowerCase(),
+  );
+  return match?.[1] ?? text.charAt(0).toUpperCase() + text.slice(1);
+};
+const colorText = (value: string) =>
+  labelFor(
+    Object.fromEntries(Object.keys(colorLabels).map((key) => [key, colorLabel(key)])),
+    value,
+  );
+const categoryText = (value: string) =>
+  labelFor({ ...categoryLabels, underlayer: t('Дотуур давхарга', 'Underlayers') }, value);
+const unavailableLabels: Record<string, string> = localized({
+  archived: ['Архивласан', 'Archived'],
+  laundry: ['Угаалгад байгаа', 'In the laundry'],
+  not_clean: ['Угаалгад байгаа', 'In the laundry'],
+  repair: ['Засварт байгаа', 'In repair'],
+  lent_out: ['Зээлүүлсэн', 'Lent out'],
+  stored: ['Хадгалалтад', 'In storage'],
+  not_found: ['Олдсонгүй', 'Not found'],
+  deleted: ['Устгасан', 'Deleted'],
+});
+const displayDate = (date: string) => formatDate(date.slice(0, 10), 'year');
+/** Monday-first weekday initials for the wear log calendar. */
+const weekdayLabels = () => [
+  t('Да', 'Mo'),
+  t('Мя', 'Tu'),
+  t('Лх', 'We'),
+  t('Пү', 'Th'),
+  t('Ба', 'Fr'),
+  t('Бя', 'Sa'),
+  t('Ня', 'Su'),
+];
+type LookItem = ApiSavedLook['items'][number];
+
+/** Garment photo for a saved look tile; falls back to an outline icon while loading or if missing. */
+function LookItemImage({ item }: { item: LookItem }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    let objectUrl = '';
+    void accountApi
+      .fittingRoomItemImage(item.source, item.item_id, controller.signal)
+      .then((blob) => {
+        if (controller.signal.aborted) return;
+        objectUrl = URL.createObjectURL(blob);
+        setUrl(objectUrl);
+      })
+      .catch(() => {
+        /* Missing photos keep the outline icon. */
+      });
+    return () => {
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [item.source, item.item_id]);
+  return (
+    <div className={`account-look-tile ${item.is_available ? '' : 'unavailable'}`}>
+      {url ? <img src={url} alt="" onError={() => setUrl('')} /> : <TShirt size={22} />}
+    </div>
+  );
+}
 
 function allowedSlots(garment: ApiGarment): OutfitSlot[] {
   switch (garment.category) {
@@ -264,6 +327,18 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
       ),
     );
   const recordedDay = history?.days.find((day) => day.date === wearDate);
+  const wearForm = useRef<HTMLFormElement>(null);
+  const calendarDays = useMemo(() => {
+    if (!month) return [];
+    const [year, number] = month.split('-').map(Number);
+    const length = new Date(Date.UTC(year, number, 0)).getUTCDate();
+    const offset = (new Date(Date.UTC(year, number - 1, 1)).getUTCDay() + 6) % 7;
+    return [
+      ...Array.from({ length: offset }, () => ''),
+      ...Array.from({ length }, (_, index) => `${month}-${String(index + 1).padStart(2, '0')}`),
+    ];
+  }, [month]);
+  const wornCounts = new Map(history?.days.map((day) => [day.date, day.items.length]) ?? []);
   const canRecord =
     !!today &&
     isCalendarDate(wearDate) &&
@@ -283,7 +358,12 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
       Array.from(cleanName).length > 80 ||
       /[\u0000-\u001f\u007f-\u009f]/.test(cleanName)
     ) {
-      setError('Name your look and choose a complete set of available wardrobe pieces.');
+      setError(
+        t(
+          'Хослолдоо нэр өгч, шүүгээнээсээ өмсөхөд бэлэн хувцсаар бүрэн хослол сонгоно уу.',
+          'Name your look and choose a complete set of ready-to-wear pieces from your wardrobe.',
+        ),
+      );
       return;
     }
     void mutate('save', JSON.stringify(['save', cleanName, selectedItems]), async (signal, key) => {
@@ -292,7 +372,10 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
         idempotencyKey: key,
       });
       return {
-        notice: 'Look saved to your account. No wear has been recorded.',
+        notice: t(
+          'Хослолыг бүртгэлд хадгаллаа. Өмссөн бүртгэл үүсээгүй.',
+          'Look saved to your account. No wear has been recorded.',
+        ),
         apply: () => {
           setLooks((current) => [saved, ...current.filter((look) => look.id !== saved.id)]);
           setCreating(false);
@@ -306,7 +389,12 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
   function record(event: FormEvent) {
     event.preventDefault();
     if (!canRecord) {
-      setError('Choose a valid past or current date and up to 20 confirmed wardrobe pieces.');
+      setError(
+        t(
+          'Өнөөдрийн эсвэл өмнөх огноо, баталгаажсан 20 хүртэл хувцас сонгоно уу.',
+          'Choose today or a past date, and up to 20 confirmed pieces.',
+        ),
+      );
       return;
     }
     const ids = [...wearIds].sort();
@@ -314,8 +402,14 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
       const receipt = await accountApi.recordWear(wearDate, ids, { signal, idempotencyKey: key });
       return {
         notice: receipt.added_count
-          ? `${receipt.added_count} ${receipt.added_count === 1 ? 'piece' : 'pieces'} added to ${displayDate(receipt.worn_date)}.`
-          : 'These pieces were already recorded for this day.',
+          ? t(
+              `${displayDate(receipt.worn_date)} өдөрт ${receipt.added_count} хувцас нэмлээ.`,
+              `${receipt.added_count} ${receipt.added_count === 1 ? 'piece' : 'pieces'} added to ${displayDate(receipt.worn_date)}.`,
+            )
+          : t(
+              'Эдгээр хувцас энэ өдөр аль хэдийн бүртгэгдсэн байна.',
+              'These pieces were already recorded for this day.',
+            ),
         apply: () => {
           setWearIds([]);
           setMonth(receipt.worn_date.slice(0, 7));
@@ -323,6 +417,18 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
         },
       };
     });
+  }
+
+  function pickDay(date: string) {
+    setWearDate(date);
+    setWearIds([]);
+    setNotice(
+      t(
+        `${displayDate(date)} өдөрт нэмэх хувцсаа дээрх маягтаас сонгоно уу.`,
+        `Choose pieces to add to ${displayDate(date)} in the form above.`,
+      ),
+    );
+    wearForm.current?.scrollIntoView({ block: 'nearest' });
   }
 
   function changeMonth(offset: number) {
@@ -334,23 +440,39 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
   if (!user)
     return (
       <p className="account-caption" role="status">
-        Sign in to see your saved looks and wear journal.
+        {t(
+          'Хадгалсан хослол, өмссөн бүртгэлээ харахын тулд нэвтэрнэ үү.',
+          'Sign in to see your saved looks and wear log.',
+        )}
       </p>
     );
 
   return (
-    <section className="account-looks" aria-label="Saved looks and wear journal">
+    <section
+      className="account-looks"
+      aria-label={t('Хадгалсан хослол ба өмссөн бүртгэл', 'Saved looks and wear log')}
+    >
       <div className="account-looks-toolbar">
-        <div className="account-looks-switch" aria-label="Collection view">
-          <button type="button" aria-pressed={view === 'looks'} onClick={() => setView('looks')}>
-            <Bookmark size={15} /> Saved looks
+        <div className="segmented account-looks-switch" aria-label={t('Харагдац', 'View')}>
+          <button
+            type="button"
+            className={view === 'looks' ? 'active' : ''}
+            aria-pressed={view === 'looks'}
+            onClick={() => setView('looks')}
+          >
+            <BookmarkSimple size={15} weight="regular" /> {t('Хадгалсан хослол', 'Saved looks')}
           </button>
-          <button type="button" aria-pressed={view === 'wear'} onClick={() => setView('wear')}>
-            <CalendarDays size={15} /> Wear journal
+          <button
+            type="button"
+            className={view === 'wear' ? 'active' : ''}
+            aria-pressed={view === 'wear'}
+            onClick={() => setView('wear')}
+          >
+            <CalendarBlank size={15} weight="regular" /> {t('Өмссөн бүртгэл', 'Wear log')}
           </button>
         </div>
         <button
-          className="account-text-button"
+          className="text-link account-link"
           type="button"
           disabled={!!pending || looksLoading || moreLoading || historyLoading}
           onClick={() => {
@@ -358,7 +480,7 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
             setHistoryRefresh((value) => value + 1);
           }}
         >
-          <RefreshCw size={14} /> Refresh
+          <ArrowsClockwise size={15} weight="regular" /> {t('Шинэчлэх', 'Refresh')}
         </button>
       </div>
       {error && (
@@ -375,13 +497,16 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
         <>
           <div className="account-section-heading">
             <div>
-              <h4>Favorite combinations, kept close.</h4>
+              <h4>{t('Таны хадгалсан хослол', 'Your saved looks')}</h4>
               <p className="account-caption">
-                Saved in your account. Creating a look does not generate a photo or record wear.
+                {t(
+                  'Бүртгэлд тань хадгалагдана. Хослол үүсгэхэд зураг гарахгүй, өмссөн бүртгэл ч үүсэхгүй.',
+                  'Saved in your account. Creating a look doesn’t generate a photo or record wear.',
+                )}
               </p>
             </div>
             <button
-              className="account-button account-primary"
+              className={creating ? 'button secondary small' : 'button small'}
               type="button"
               disabled={!!pending || looksLoading || moreLoading}
               onClick={() => {
@@ -390,25 +515,26 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                 setNotice('');
               }}
             >
-              <Plus size={15} />
-              {creating ? 'Close composer' : 'Create look'}
+              {creating ? <X size={15} weight="regular" /> : <Plus size={15} weight="regular" />}
+              {creating ? t('Хаах', 'Close') : t('Хослол үүсгэх', 'Create look')}
             </button>
           </div>
           {creating && (
-            <form className="account-look-composer" onSubmit={save}>
+            <form className="account-panel account-look-composer" onSubmit={save}>
               <label className="account-look-name">
-                Look name
+                {t('Хослолын нэр', 'Look name')}
                 <input
+                  className="field"
                   value={name}
                   maxLength={80}
                   required
                   disabled={!!pending}
                   onChange={(event) => setName(event.target.value)}
-                  placeholder="A familiar favorite"
+                  placeholder={t('Жишээ нь: Дуртай хослол', 'For example: Favorite look')}
                 />
               </label>
               <fieldset disabled={!!pending} className="account-look-type">
-                <legend>Start with</legend>
+                <legend>{t('Юунаас эхлэх вэ', 'Start with')}</legend>
                 {(['separates', 'dress'] as const).map((value) => (
                   <label key={value}>
                     <input
@@ -426,16 +552,25 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                         }));
                       }}
                     />
-                    {value === 'separates' ? 'Top and bottom' : 'Dress or deel'}
+                    {value === 'separates'
+                      ? t('Цамц ба өмд/банзал', 'Top and bottom')
+                      : t('Даашинз эсвэл дээл', 'Dress or deel')}
                   </label>
                 ))}
               </fieldset>
               <div className="account-look-slots">
                 {slots.map((slot) => (
                   <label key={slot}>
-                    {slotLabels[slot]}
-                    <span>{requiredSlots.includes(slot) ? 'Required' : 'Optional'}</span>
+                    <span className="account-label">
+                      {slotLabels[slot]}
+                      <span>
+                        {requiredSlots.includes(slot)
+                          ? t('Заавал', 'Required')
+                          : t('Заавал биш', 'Optional')}
+                      </span>
+                    </span>
                     <select
+                      className="field account-select"
                       value={selection[slot] ?? ''}
                       disabled={!!pending}
                       onChange={(event) =>
@@ -444,7 +579,9 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                       required={requiredSlots.includes(slot)}
                     >
                       <option value="">
-                        {requiredSlots.includes(slot) ? 'Choose a piece' : 'Leave empty'}
+                        {requiredSlots.includes(slot)
+                          ? t('Хувцас сонгох', 'Choose a piece')
+                          : t('Хоосон үлдээх', 'Leave empty')}
                       </option>
                       {available
                         .filter((garment) => allowedSlots(garment).includes(slot))
@@ -457,7 +594,7 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                             )}
                           >
                             {garment.name}
-                            {garment.primary_color ? ` · ${humanize(garment.primary_color)}` : ''}
+                            {garment.primary_color ? ` · ${colorText(garment.primary_color)}` : ''}
                           </option>
                         ))}
                     </select>
@@ -466,37 +603,45 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
               </div>
               {!available.length && (
                 <p className="account-caption">
-                  Add and confirm wardrobe pieces first. Looks use clean, available clothing.
+                  {t(
+                    'Эхлээд шүүгээндээ хувцас нэмж баталгаажуулна уу. Хослолд цэвэр, өмсөхөд бэлэн хувцас ашиглана.',
+                    'Add and confirm wardrobe pieces first. Looks use clean, ready-to-wear clothing.',
+                  )}
                 </p>
               )}
               <p className="account-caption">
-                Choose from the wardrobe pieces loaded in your account. Load more in My wardrobe if
-                something is missing.
+                {t(
+                  'Бүртгэлд ачаалагдсан хувцаснаас сонгоно уу. Дутуу байвал Миний шүүгээ хэсгээс цааш нь ачаална уу.',
+                  'Choose from the pieces loaded in your account. If something is missing, load more in My wardrobe.',
+                )}
               </p>
               <div className="account-action-row">
                 <span className="account-caption">
                   {complete
-                    ? 'Your essentials are in place.'
-                    : 'Complete your outfit with footwear and a dress, or a top and bottom.'}
+                    ? t('Үндсэн хувцас бүрдлээ.', 'Your essentials are in place.')
+                    : t(
+                        'Хослолдоо гутал ба даашинз, эсвэл цамц ба өмд/банзал сонгоно уу.',
+                        'Complete your look with shoes and a dress, or a top and bottom.',
+                      )}
                 </span>
                 <button
                   type="submit"
-                  className="account-button account-primary"
+                  className="button"
                   disabled={!!pending || looksLoading || moreLoading || !complete || !name.trim()}
                 >
                   {pending === 'save' ? (
-                    <LoaderCircle size={16} className="account-spin" />
+                    <CircleNotch size={18} className="account-spin" />
                   ) : (
-                    <Bookmark size={16} />
+                    <BookmarkSimple size={18} />
                   )}{' '}
-                  Save look
+                  {t('Хослол хадгалах', 'Save look')}
                 </button>
               </div>
             </form>
           )}
           {looksLoading && (
             <p className="account-caption" role="status">
-              Loading your saved looks…
+              {t('Хадгалсан хослолыг ачааллаж байна…', 'Loading your saved looks…')}
             </p>
           )}
           {looksError && (
@@ -506,46 +651,72 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
           )}
           {!looksLoading && !looksError && !looks.length && (
             <div className="account-empty">
-              <Bookmark size={28} />
-              <h4>Something worth keeping starts here.</h4>
-              <p>Create a complete look from your confirmed wardrobe.</p>
+              <BookmarkSimple size={28} />
+              <h4>{t('Хадгалсан хослол хараахан алга', 'No saved looks yet')}</h4>
+              <p>
+                {t(
+                  'Баталгаажсан хувцаснаасаа бүрэн хослол үүсгээрэй.',
+                  'Create a complete look from your confirmed wardrobe.',
+                )}
+              </p>
             </div>
           )}
           <div className="account-saved-grid">
             {looks.map((look) => (
               <article className="account-saved-look" key={look.id}>
-                <div className="account-section-heading">
+                <div
+                  className="account-look-media"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.min(Math.max(look.items.length, 1), 4)}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {look.items.slice(0, 4).map((item) => (
+                    <LookItemImage
+                      key={`${item.slot}:${item.source}:${item.item_id}`}
+                      item={item}
+                    />
+                  ))}
+                </div>
+                <div className="account-look-head">
                   <div>
-                    <span className={`account-status ${look.is_available ? 'ready' : ''}`}>
-                      {look.is_available ? 'Available' : 'Some pieces unavailable'}
-                    </span>
                     <h4>{look.name}</h4>
-                    <p className="account-caption">Saved {displayDate(look.created_at)}</p>
+                    <p>
+                      <span className={`account-status ${look.is_available ? 'ready' : 'muted'}`}>
+                        {look.is_available
+                          ? t('Өмсөхөд бэлэн', 'Ready to wear')
+                          : t('Зарим хувцас боломжгүй', 'Some pieces unavailable')}
+                      </span>
+                      <span>
+                        {t(
+                          `Хадгалсан: ${displayDate(look.created_at)}`,
+                          `Saved ${displayDate(look.created_at)}`,
+                        )}
+                      </span>
+                    </p>
                   </div>
                   <button
                     type="button"
-                    className="account-text-button"
-                    aria-label={`Delete ${look.name}`}
+                    className="icon-button account-look-delete-button"
+                    aria-label={t(`Устгах: ${look.name}`, `Delete ${look.name}`)}
                     disabled={!!pending || moreLoading || looksLoading}
                     onClick={() => setDeleteId(look.id)}
                   >
-                    <Trash2 size={16} />
+                    <Trash size={18} />
                   </button>
                 </div>
                 <ul className="account-look-items">
                   {look.items.map((item) => (
                     <li key={`${item.slot}:${item.source}:${item.item_id}`}>
-                      <Shirt size={16} />
-                      <div>
-                        <strong>{item.name || 'Unavailable piece'}</strong>
-                        <span>
-                          {slotLabels[item.slot]} ·{' '}
-                          {item.source === 'catalog' ? 'Oyu AI catalog' : 'Your wardrobe'}
-                          {!item.is_available
-                            ? ` · ${humanize(item.unavailable_reason ?? 'unavailable')}`
-                            : ''}
-                        </span>
-                      </div>
+                      <strong>{item.name || t('Боломжгүй хувцас', 'Unavailable piece')}</strong>
+                      <span>
+                        {slotLabels[item.slot]} ·{' '}
+                        {item.source === 'catalog'
+                          ? t('Oyu AI каталог', 'Oyu AI catalog')
+                          : t('Таны шүүгээ', 'Your wardrobe')}
+                        {!item.is_available
+                          ? ` · ${(item.unavailable_reason && unavailableLabels[item.unavailable_reason]) || t('Боломжгүй', 'Unavailable')}`
+                          : ''}
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -553,28 +724,35 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                   <div
                     className="account-look-delete"
                     role="group"
-                    aria-label={`Confirm deleting ${look.name}`}
+                    aria-label={t(`Устгахыг батлах: ${look.name}`, `Confirm deleting ${look.name}`)}
                   >
-                    <p>Delete this saved combination? Your wardrobe and wear records will stay.</p>
+                    <p>
+                      {t(
+                        'Энэ хадгалсан хослолыг устгах уу? Шүүгээ болон өмссөн бүртгэл тань хэвээр үлдэнэ.',
+                        'Delete this saved look? Your wardrobe and wear log will stay.',
+                      )}
+                    </p>
                     <div className="account-action-row">
                       <button
                         type="button"
-                        className="account-button account-subtle"
+                        className="button secondary small"
                         disabled={!!pending}
                         onClick={() => setDeleteId(null)}
                       >
-                        Keep look
+                        {t('Хослолыг үлдээх', 'Keep look')}
                       </button>
                       <button
                         type="button"
-                        className="account-button account-danger"
+                        className="button danger small"
                         disabled={!!pending}
                         onClick={() =>
                           void mutate('delete', `delete:${look.id}`, async (signal, key) => {
                             await accountApi.deleteLook(look.id, { signal, idempotencyKey: key });
                             return {
-                              notice:
-                                'Saved look deleted. Your wardrobe and wear records are unchanged.',
+                              notice: t(
+                                'Хадгалсан хослолыг устгалаа. Шүүгээ болон өмссөн бүртгэл тань өөрчлөгдөөгүй.',
+                                'Saved look deleted. Your wardrobe and wear log are unchanged.',
+                              ),
                               apply: () => {
                                 setLooks((current) =>
                                   current.filter((item) => item.id !== look.id),
@@ -585,7 +763,9 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                           })
                         }
                       >
-                        {pending === 'delete' ? 'Deleting…' : 'Delete look'}
+                        {pending === 'delete'
+                          ? t('Устгаж байна…', 'Deleting…')
+                          : t('Хослол устгах', 'Delete look')}
                       </button>
                     </div>
                   </div>
@@ -595,12 +775,12 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
           </div>
           {cursor && (
             <button
-              className="account-button account-subtle"
+              className="button secondary account-more"
               type="button"
               disabled={moreLoading || looksLoading || !!pending}
               onClick={() => void loadMore()}
             >
-              {moreLoading ? 'Loading…' : 'Load more looks'}
+              {moreLoading ? t('Ачааллаж байна…', 'Loading…') : t('Цааш нь ачаалах', 'Load more')}
             </button>
           )}
         </>
@@ -608,35 +788,44 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
         <>
           <div className="account-section-heading">
             <div>
-              <h4>What you actually wore.</h4>
+              <h4>{t('Өмссөнөө тэмдэглэх', 'Log what you wore')}</h4>
               <p className="account-caption">
-                Add pieces to a day’s record. Existing records remain; this does not replace or
-                remove them.
+                {t(
+                  'Өдрийн бүртгэлд хувцас нэмнэ үү. Өмнөх бүртгэл хэвээр үлдэх бөгөөд солигдох, устгагдахгүй.',
+                  'Add pieces to a day’s record. Existing records stay; they aren’t replaced or removed.',
+                )}
               </p>
             </div>
           </div>
           {dateError && (
             <div className="account-error" role="alert">
-              <p>Could not load your account’s current date. {dateError}</p>
+              <p>
+                {t(
+                  'Бүртгэлийн өнөөдрийн огноог ачаалж чадсангүй.',
+                  'Couldn’t load your account’s current date.',
+                )}{' '}
+                {dateError}
+              </p>
               <button
                 type="button"
-                className="account-text-button"
+                className="text-link account-link"
                 disabled={looksLoading}
                 onClick={() => setRefresh((value) => value + 1)}
               >
-                Try again
+                {t('Дахин оролдох', 'Try again')}
               </button>
             </div>
           )}
           {!today && !dateError && (
             <p className="account-caption" role="status">
-              Loading your account calendar…
+              {t('Бүртгэлийн хуанлийг ачааллаж байна…', 'Loading your account calendar…')}
             </p>
           )}
-          <form className="account-wear-form" onSubmit={record}>
+          <form className="account-panel account-wear-form" onSubmit={record} ref={wearForm}>
             <label className="account-look-name">
-              Date worn
+              {t('Өмссөн огноо', 'Date worn')}
               <input
+                className="field"
                 type="date"
                 value={wearDate}
                 max={today || undefined}
@@ -649,18 +838,24 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
               />
             </label>
             <p className="account-caption">
-              Choose up to 20 pieces you wore. Clothing currently in the laundry can still be
-              recorded for a past day.
+              {t(
+                'Өмссөн 20 хүртэл хувцсаа сонгоно уу. Одоо угаалгад байгаа хувцсыг өмнөх өдөрт бүртгэж болно.',
+                'Choose up to 20 pieces you wore. Clothing that’s in the laundry now can still be recorded for a past day.',
+              )}
             </p>
             {recordedDay && (
               <p className="account-recorded-note">
-                <Check size={14} />
-                {recordedDay.items.length} pieces already recorded on this date. Adding them again
-                will not create duplicates.
+                <Check size={15} weight="regular" />
+                {t(
+                  `Энэ өдөр ${recordedDay.items.length} хувцас аль хэдийн бүртгэгдсэн. Дахин нэмэхэд давхардахгүй.`,
+                  recordedDay.items.length === 1
+                    ? '1 piece is already recorded on this date. Adding it again won’t create a duplicate.'
+                    : `${recordedDay.items.length} pieces are already recorded on this date. Adding them again won’t create duplicates.`,
+                )}
               </p>
             )}
             <fieldset className="account-wear-choices" disabled={!!pending || !today}>
-              <legend>Clothing you wore</legend>
+              <legend>{t('Өмссөн хувцас', 'Clothing you wore')}</legend>
               {wearable.map((garment) => (
                 <label key={garment.id}>
                   <input
@@ -675,12 +870,12 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
                       )
                     }
                   />
-                  <Shirt size={18} />
+                  <TShirt size={18} />
                   <span>
                     <strong>{garment.name}</strong>
                     <small>
-                      {humanize(garment.category ?? 'clothing')}
-                      {garment.primary_color ? ` · ${humanize(garment.primary_color)}` : ''}
+                      {garment.category ? categoryText(garment.category) : t('Хувцас', 'Clothing')}
+                      {garment.primary_color ? ` · ${colorText(garment.primary_color)}` : ''}
                     </small>
                   </span>
                 </label>
@@ -688,40 +883,47 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
             </fieldset>
             {!wearable.length && (
               <p className="account-caption">
-                Confirmed, active garments from My wardrobe will appear here.
+                {t(
+                  'Миний шүүгээ хэсгийн баталгаажсан, идэвхтэй хувцас энд харагдана.',
+                  'Confirmed, active pieces from My wardrobe will appear here.',
+                )}
               </p>
             )}
             <div className="account-action-row">
-              <span className="account-caption">{wearIds.length} pieces selected</span>
-              <button
-                className="account-button account-primary"
-                type="submit"
-                disabled={!!pending || !canRecord}
-              >
+              <span className="account-caption account-count">
+                {t(
+                  `${wearIds.length} хувцас сонгосон`,
+                  `${wearIds.length} ${wearIds.length === 1 ? 'piece' : 'pieces'} selected`,
+                )}
+              </span>
+              <button className="button" type="submit" disabled={!!pending || !canRecord}>
                 {pending === 'wear' ? (
-                  <LoaderCircle size={16} className="account-spin" />
+                  <CircleNotch size={18} className="account-spin" />
                 ) : (
-                  <Check size={16} />
+                  <Check size={18} />
                 )}{' '}
-                Add wear record
+                {t('Өмссөнөө тэмдэглэх', 'Log what you wore')}
               </button>
             </div>
           </form>
           <div className="account-section-heading account-history-navigation">
-            <h4>Your wear journal</h4>
+            <h4>{t('Таны өмссөн бүртгэл', 'Your wear log')}</h4>
             <div>
               <button
                 type="button"
-                className="account-text-button"
+                className="icon-button"
                 disabled={!month || historyLoading}
-                aria-label="Previous month"
+                aria-label={t('Өмнөх сар', 'Previous month')}
                 onClick={() => changeMonth(-1)}
               >
-                <ChevronLeft size={17} />
+                <CaretLeft size={18} />
               </button>
               <label>
-                <span className="account-visually-hidden">Journal month</span>
+                <span className="account-visually-hidden">
+                  {t('Бүртгэлийн сар', 'Wear log month')}
+                </span>
                 <input
+                  className="field"
                   type="month"
                   value={month}
                   max={today.slice(0, 7) || undefined}
@@ -735,18 +937,55 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
               </label>
               <button
                 type="button"
-                className="account-text-button"
+                className="icon-button"
                 disabled={!month || historyLoading || month >= today.slice(0, 7)}
-                aria-label="Next month"
+                aria-label={t('Дараах сар', 'Next month')}
                 onClick={() => changeMonth(1)}
               >
-                <ChevronRight size={17} />
+                <CaretRight size={18} />
               </button>
             </div>
           </div>
+          {month && today && (
+            <div
+              className="account-calendar"
+              role="group"
+              aria-label={formatDate(`${month}-01`, 'month')}
+            >
+              {weekdayLabels().map((label) => (
+                <span key={label} className="account-calendar-weekday" aria-hidden="true">
+                  {label}
+                </span>
+              ))}
+              {calendarDays.map((date, index) =>
+                date ? (
+                  <button
+                    key={date}
+                    type="button"
+                    className={[
+                      date === today ? 'today' : '',
+                      date === wearDate ? 'selected' : '',
+                      wornCounts.has(date) ? 'worn' : '',
+                    ].join(' ')}
+                    aria-pressed={date === wearDate}
+                    aria-label={t(
+                      `${displayDate(date)}${wornCounts.has(date) ? ` · ${wornCounts.get(date)} хувцас` : ''}`,
+                      `${displayDate(date)}${wornCounts.has(date) ? ` · ${wornCounts.get(date)} ${wornCounts.get(date) === 1 ? 'piece' : 'pieces'}` : ''}`,
+                    )}
+                    disabled={date > today || !!pending}
+                    onClick={() => pickDay(date)}
+                  >
+                    <span>{Number(date.slice(8))}</span>
+                  </button>
+                ) : (
+                  <span key={`blank-${index}`} aria-hidden="true" />
+                ),
+              )}
+            </div>
+          )}
           {historyLoading && (
             <p className="account-caption" role="status">
-              Loading recorded outfits…
+              {t('Бүртгэсэн хослолыг ачааллаж байна…', 'Loading recorded outfits…')}
             </p>
           )}
           {historyError && (
@@ -754,52 +993,52 @@ export default function AccountLooks({ garments }: { garments: ApiGarment[] }) {
               <p>{historyError}</p>
               <button
                 type="button"
-                className="account-text-button"
+                className="text-link account-link"
                 onClick={() => setHistoryRefresh((value) => value + 1)}
               >
-                Retry journal
+                {t('Дахин ачаалах', 'Reload')}
               </button>
             </div>
           )}
           {!historyLoading && !historyError && history && !history.days.length && (
-            <div className="account-empty">
-              <CalendarDays size={27} />
-              <h4>A month of possibilities.</h4>
-              <p>No outfits recorded for this month yet.</p>
-            </div>
+            <p className="account-caption account-history-empty">
+              {t(
+                'Энэ сард хараахан хослол бүртгээгүй байна.',
+                'No outfits recorded for this month yet.',
+              )}
+            </p>
           )}
           <div className="account-journal-days">
             {history?.days.map((day) => (
               <article key={day.date}>
                 <div>
-                  <CalendarDays size={16} />
                   <h5>{displayDate(day.date)}</h5>
-                  <span>{day.items.length} pieces</span>
+                  <span>
+                    {t(
+                      `${day.items.length} хувцас`,
+                      `${day.items.length} ${day.items.length === 1 ? 'piece' : 'pieces'}`,
+                    )}
+                  </span>
                 </div>
                 <ul>
                   {day.items.map((item) => (
                     <li key={item.id}>
-                      <strong>{item.name || 'Wardrobe piece'}</strong>
+                      <strong>{item.name || t('Шүүгээний хувцас', 'Wardrobe piece')}</strong>
                       <span>
-                        {humanize(item.category)}
-                        {item.archived ? ' · Archived' : ''}
+                        {categoryText(item.category)}
+                        {item.archived ? t(' · Архивласан', ' · Archived') : ''}
                       </span>
                     </li>
                   ))}
                 </ul>
                 <button
                   type="button"
-                  className="account-text-button"
+                  className="text-link account-link"
                   disabled={!!pending}
-                  onClick={() => {
-                    setWearDate(day.date);
-                    setWearIds([]);
-                    setNotice(
-                      `Choose additional pieces for ${displayDate(day.date)} in the form above.`,
-                    );
-                  }}
+                  onClick={() => pickDay(day.date)}
                 >
-                  Add pieces to this day <Plus size={13} />
+                  <Plus size={15} weight="regular" />{' '}
+                  {t('Энэ өдөрт хувцас нэмэх', 'Add pieces to this day')}
                 </button>
               </article>
             ))}

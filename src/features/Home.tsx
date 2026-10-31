@@ -1,42 +1,157 @@
 import { useState } from 'react';
 import {
   ArrowRight,
-  ArrowUpRight,
-  Camera,
+  BookmarkSimple,
+  CaretLeft,
+  CaretRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
-  Heart,
   Plus,
-  RefreshCw,
-  Shirt,
-  Sparkles,
-} from 'lucide-react';
+  Scan,
+  Shuffle,
+  TShirt,
+  VideoCamera,
+} from '@phosphor-icons/react';
 import { useApp } from '../lib/store';
-import { isCompleteLook, localDate, recommend } from '../lib/demo';
+import { finishingTouches, isCompleteLook, localDate, recommend } from '../lib/demo';
+import { formatDate, weekdayName, weekdayShort } from '../lib/i18n';
+import { lookReasons } from '../lib/style';
+import { reviewLook } from '../lib/oyu';
+import { OyuNote } from '../components/Oyu';
+import { OyuOutfitCheck } from './OyuOutfitCheck';
+import { idleGarments } from '../lib/workspace';
 import { Dialog } from '../components/Dialog';
-import { categoryLabels } from '../lib/types';
+import { JourneyStrip } from '../components/Journey';
+import { AudienceToggle } from '../components/AudienceToggle';
+import type { AudienceFilter } from '../components/AudienceToggle';
+import { categoryLabels, tryOnCategories } from '../lib/types';
+import type { Category, Garment, StyleTag } from '../lib/types';
+import { localized, t } from '../lib/lang';
+import './home.css';
+
+const lookNames = () => [
+  t('Өдөр тутмын дэгжин', 'Everyday, elevated'),
+  t('Хялбар ажлын өдөр', 'An easy workday'),
+  t('Даруу гоолиг', 'Quietly polished'),
+  t('Зөөлөн, энгийн', 'Soft and simple'),
+  t('Амралтын өдөрт бэлэн', 'Weekend ready'),
+  t('Чөлөөт ч цэмцгэр', 'Relaxed but put together'),
+  t('Цэвэр шугам', 'Clean lines'),
+  t('Жаахан зоримог', 'A little bolder'),
+];
+/** A piece count in the interface language, e.g. "5 pieces". */
+const pieceCount = (n: number) => t(`${n} хувцас`, `${n} ${n === 1 ? 'piece' : 'pieces'}`);
+const categories = Object.keys(categoryLabels) as Category[];
+/** Curated edits on the Overview; each opens the wardrobe with matching filters. */
+const edits = (): {
+  title: string;
+  text: string;
+  audience?: AudienceFilter;
+  style?: StyleTag;
+  match: (g: Garment) => boolean;
+}[] => [
+  {
+    title: 'Old money',
+    text: t('Сүлжмэл цамц, костюм, сувд, лофер', 'Knitwear, tailoring, pearls, loafers'),
+    style: 'Old money',
+    match: (g) => g.style === 'Old money',
+  },
+  {
+    title: 'Evening',
+    text: t('Үдшийн даашинз, оосортой даашинз, өндөр өсгийт', 'Evening gowns, slip dresses, heels'),
+    style: 'Evening',
+    match: (g) => g.style === 'Evening',
+  },
+  {
+    title: t('Эмэгтэй хувцас', 'Womenswear'),
+    text: t('Даашинз, блуз, банзал гэх мэт', 'Dresses, blouses, skirts and more'),
+    audience: 'women',
+    match: (g) => g.audience === 'women',
+  },
+  {
+    title: t('Эрэгтэй хувцас', 'Menswear'),
+    text: t('Оксфорд цамц, пиджак, чинос гэх мэт', 'Oxford shirts, blazers, chinos and more'),
+    audience: 'men',
+    match: (g) => g.audience === 'men',
+  },
+];
+const slotLabels: Partial<Record<Category, string>> = localized({
+  bottom: ['Өмд, банзал', 'Bottoms'],
+  footwear: ['Гутал', 'Shoes'],
+  outerwear: ['Гадуур хувцас нэмэх', 'Add outerwear'],
+  accessory: ['Аксессуар нэмэх', 'Add an accessory'],
+});
+const dimensionLabels = localized({
+  color: ['Өнгөний зохицол', 'Color harmony'],
+  hairstyle: ['Үс засалт', 'Hairstyle'],
+  accessories: ['Аксессуар', 'Accessories'],
+  styling: ['Хослуулалт', 'Styling'],
+});
+/** Up to `count` pieces, one per category first, so a preview shows variety. */
+function varied(items: Garment[], count: number) {
+  return [
+    ...items.filter((g, i) => items.findIndex((o) => o.category === g.category) === i),
+    ...items,
+  ]
+    .filter((g, i, all) => all.indexOf(g) === i)
+    .slice(0, count);
+}
+
 export function Home() {
-  const { data, navigate, logWear, saveLook, updateGarment, notify, openAccount } = useApp();
+  const { data, navigate, openWith, logWear, saveLook } = useApp();
   const [variant, setVariant] = useState(0);
+  const [lookFor, setLookFor] = useState<AudienceFilter>('all');
   const [weekOffset, setWeekOffset] = useState(0);
   const [selectedDate, setSelectedDate] = useState(localDate());
   const [wearOpen, setWearOpen] = useState(false);
   const [wearIds, setWearIds] = useState<string[]>([]);
   const [analysisOpen, setAnalysisOpen] = useState(false);
-  const look = recommend(data.garments, variant);
+  const look = recommend(data.garments, variant, lookFor);
+  const extras = finishingTouches(look, data.garments, variant, lookFor);
+  const outfit = [...look, ...extras];
+  const names = lookNames();
+  const lookName = names[variant % names.length];
+  const reasons = lookReasons(outfit);
+  const review = reviewLook(outfit, data.preferences);
+  const palette = [...new Set(outfit.map((g) => g.colorHex))];
   const today = localDate();
   const complete = isCompleteLook(
     look.map((g) => g.id),
     data.garments,
   );
+  const tryOnPiece = look.find((g) => tryOnCategories.includes(g.category));
+  const hero =
+    outfit.find((g) => g.category === 'dress') ?? outfit.find((g) => g.category === 'top');
+  const slots = (
+    hero?.category === 'dress'
+      ? (['footwear', 'outerwear', 'accessory'] as Category[])
+      : (['bottom', 'footwear', 'outerwear', 'accessory'] as Category[])
+  ).map((category) => ({ category, piece: outfit.find((g) => g.category === category) }));
+  const idle = idleGarments(data);
+  const laundry = data.garments.filter((g) => g.availability === 'laundry').length;
   const scored = data.analyses.filter((a) => a.overall !== null);
   const average = scored.length
     ? Math.round(scored.reduce((s, a) => s + a.overall!, 0) / scored.length)
     : null;
-  const todayDate = new Date();
-  const weekStart = new Date(todayDate);
-  weekStart.setDate(todayDate.getDate() - ((todayDate.getDay() + 6) % 7) + weekOffset * 7);
+  const dimensions = (Object.keys(dimensionLabels) as (keyof typeof dimensionLabels)[]).map(
+    (key) => {
+      const values = scored.flatMap((a) =>
+        a.dimensions[key] === null ? [] : [a.dimensions[key]!],
+      );
+      return {
+        key,
+        value: values.length ? values.reduce((sum, v) => sum + v, 0) / values.length : null,
+      };
+    },
+  );
+  const now = new Date();
+  const greeting =
+    now.getHours() < 12
+      ? t('Өглөөний мэнд', 'Good morning')
+      : now.getHours() < 18
+        ? t('Өдрийн мэнд', 'Good afternoon')
+        : t('Оройн мэнд', 'Good evening');
+  const weekStart = new Date(now);
+  weekStart.setDate(now.getDate() - ((now.getDay() + 6) % 7) + weekOffset * 7);
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart);
     d.setDate(weekStart.getDate() + i);
@@ -48,292 +163,429 @@ export function Home() {
     d.setDate(d.getDate() - ((d.getDay() + 6) % 7) + offset * 7);
     setSelectedDate(offset === 0 ? today : localDate(d));
   }
-  const month = days[3].toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const weekLabel =
+    days[0].getMonth() === days[6].getMonth()
+      ? t(
+          `${formatDate(days[0])}–${days[6].getDate()}`,
+          `${days[0].getDate()}–${formatDate(days[6])}`,
+        )
+      : `${formatDate(days[0])} – ${formatDate(days[6])}`;
   const record = data.wearLogs.find((w) => w.date === selectedDate);
+  const loggedThisWeek = days.filter((d) =>
+    data.wearLogs.some((w) => w.date === localDate(d)),
+  ).length;
   const wearableHistory = [
     ...data.garments,
     ...data.archivedGarments.filter((g) => record?.garmentIds.includes(g.id)),
   ];
   const wornToday = data.wearLogs.some((w) => w.date === today);
+  const findPiece = (id: string) =>
+    data.garments.find((g) => g.id === id) ?? data.archivedGarments.find((g) => g.id === id);
+  const dayCover = (date: string) => {
+    const pieces = (data.wearLogs.find((w) => w.date === date)?.garmentIds ?? [])
+      .map(findPiece)
+      .filter((g): g is Garment => !!g);
+    return (
+      pieces.find((g) => g.category === 'dress') ??
+      pieces.find((g) => g.category === 'top') ??
+      pieces[0]
+    );
+  };
   const openWear = (date = selectedDate) => {
     setSelectedDate(date);
-    setWearIds(data.wearLogs.find((w) => w.date === date)?.garmentIds ?? look.map((g) => g.id));
+    setWearIds(data.wearLogs.find((w) => w.date === date)?.garmentIds ?? outfit.map((g) => g.id));
     setWearOpen(true);
   };
   return (
-    <div className="home-page page-enter">
-      <div className="home-heading">
+    <div className="home-page dash page-enter">
+      <header className="page-heading dash-head">
         <div>
-          <div className="eyebrow greeting-date">
-            <span /> YOUR EVERYDAY, A LITTLE MORE CONSIDERED
-          </div>
+          <p className="overline">{formatDate(now, 'weekday')}</p>
           <h1>
-            Good to see you, {data.preferences.name}
-            <span className="greeting-sparkle">✦</span>
+            {greeting}, <em>{data.preferences.name}</em>
           </h1>
-          <p>Your wardrobe. Fresh possibilities. A style that feels like you.</p>
+          <p>
+            {t(
+              'Танд байгаа хувцсанд тулгуурласан AI стилист',
+              'An AI stylist built around the clothes you already own',
+            )}
+          </p>
         </div>
-        <button className="button" onClick={() => setAnalysisOpen(true)}>
-          <Camera size={17} /> Analyze an outfit <Plus size={16} />
-        </button>
-      </div>
-      <div className="dashboard-grid">
-        <section className="card today-card">
-          <div className="today-top">
-            <div className="eyebrow">
-              <Sparkles size={14} /> A LITTLE OUTFIT INSPIRATION
-            </div>
-            <span className="subtle-pill">From your wardrobe</span>
+        <div className="dash-actions">
+          <button className="button secondary" onClick={() => setAnalysisOpen(true)}>
+            <Scan size={18} /> {t('Хослол үнэлүүлэх', 'Rate my outfit')}
+          </button>
+          <button className="button" onClick={() => navigate('live')}>
+            <VideoCamera size={18} /> {t('Шууд өмсөж үзэх', 'Live try-on')}
+          </button>
+        </div>
+      </header>
+      <JourneyStrip
+        onOpen={navigate}
+        stats={{
+          wardrobe: pieceCount(data.garments.length),
+          studio: t(
+            `${data.savedLooks.length} хадгалсан хослол`,
+            `${data.savedLooks.length} saved ${data.savedLooks.length === 1 ? 'look' : 'looks'}`,
+          ),
+          live: t('Камераар, бодит цагт', 'On camera, in real time'),
+          history: t(
+            `${data.wearLogs.length} өдөр тэмдэглэсэн`,
+            `${data.wearLogs.length} ${data.wearLogs.length === 1 ? 'day' : 'days'} logged`,
+          ),
+        }}
+      />
+      <section className="dash-hero" aria-labelledby="todays-look">
+        <div className="dash-hero-copy">
+          <div className="dash-hero-top">
+            <p className="overline">{t('Өнөөдрийн хослол', 'Today’s look')}</p>
+            <AudienceToggle
+              label={t('Хэнд зориулсан хослол', 'Who the look is for')}
+              value={lookFor}
+              onChange={(value) => {
+                setLookFor(value);
+                setVariant(0);
+              }}
+            />
           </div>
-          <div className="look-editorial">
-            <div className="look-editorial-copy">
-              <h2>
-                Less overthinking.
-                <br />
-                More <span>you.</span>
-              </h2>
-              <p>
-                A familiar favorite.
-                <br />A fresh combination.
-              </p>
-              <div className="palette-dots">
-                <i style={{ background: '#303648' }} />
-                <i style={{ background: '#b5aa97' }} />
-                <i style={{ background: '#f5f2e9' }} />
-                <span>A little harmony</span>
-              </div>
-            </div>
-            <div className="outfit-board" aria-label="Suggested outfit from your sample wardrobe">
-              {look.map((g, i) => (
-                <button
-                  key={g.id}
-                  className={`outfit-piece piece-${i}`}
-                  onClick={() => navigate('wardrobe')}
-                  aria-label={`View ${g.name}`}
-                >
-                  <img src={g.image} alt={g.name} />
-                </button>
-              ))}
-              {!complete && (
-                <div className="outfit-empty">
-                  <Shirt size={32} />
-                  <p>Add a top, bottoms and shoes to find your next combination.</p>
-                </div>
-              )}
-              <span className="outfit-board-star">✧</span>
-              <span className="outfit-caption">
-                THE EVERYDAY EDIT — Nº {String(variant + 1).padStart(2, '0')}
+          <h2 id="todays-look">
+            {complete ? lookName : t('Анхны хослолоо бүтээгээрэй', 'Create your first look')}
+          </h2>
+          <p className="dash-hero-meta">
+            {complete
+              ? t(
+                  `Таны шүүгээнээс ${outfit.length} хувцас · өнгөний зохицлоор сонгосон`,
+                  `${pieceCount(outfit.length)} from your wardrobe · chosen for color harmony`,
+                )
+              : t(
+                  'Өдөр бүр хослолын санаа авахын тулд цамц, өмд эсвэл банзал, гутал (эсвэл даашинз, гутал) нэмнэ үү.',
+                  'Add a top, bottoms and shoes (or a dress and shoes) to get a fresh look idea every day.',
+                )}
+          </p>
+          {complete && review && (
+            <OyuNote
+              className="dash-oyu"
+              mood={review.mood}
+              score={review.score}
+              lines={[review.lines[0], ...reasons]}
+            />
+          )}
+          {complete && (
+            <div className="dash-palette" aria-label={t('Өнгөний палитр', 'Color palette')}>
+              <span>{t('Палитр', 'Palette')}</span>
+              <span className="dash-swatches">
+                {palette.map((hex) => (
+                  <i key={hex} style={{ background: hex }} />
+                ))}
               </span>
             </div>
+          )}
+          <div className="dash-hero-actions">
+            <button
+              className="button"
+              disabled={!complete}
+              onClick={() => (complete ? openWear(today) : navigate('wardrobe'))}
+            >
+              {wornToday ? <Check size={18} /> : <Plus size={18} />}
+              {wornToday
+                ? t('Өнөөдрийн хослолыг шинэчлэх', 'Update today’s look')
+                : t('Үүнийг өмсөж байна', 'I’m wearing this')}
+            </button>
+            {tryOnPiece && (
+              <button
+                className="button secondary"
+                onClick={() => openWith({ page: 'live', garmentIds: [tryOnPiece.id] })}
+              >
+                <VideoCamera size={18} /> {t('Шууд өмсөж үзэх', 'Live try-on')}
+              </button>
+            )}
           </div>
-          <div className="today-bottom">
+          <div className="dash-hero-links">
+            <button className="text-link" onClick={() => setVariant((v) => v + 1)}>
+              <Shuffle size={16} /> {t('Өөр санаа харах', 'Show another idea')}
+            </button>
+            <button
+              className="text-link"
+              disabled={!complete}
+              onClick={() => saveLook({ name: lookName, garmentIds: outfit.map((g) => g.id) })}
+            >
+              <BookmarkSimple size={16} /> {t('Дараа өмсөхөөр хадгалах', 'Save for later')}
+            </button>
+          </div>
+          <p className="dash-footnote">
+            {t(
+              'Зөвхөн цэвэр, өмсөхөд бэлэн хувцсыг санал болгоно.',
+              'Only clean, ready-to-wear pieces are suggested.',
+            )}
+          </p>
+        </div>
+        <div
+          className={`dash-outfit ${hero?.category === 'dress' ? 'is-dress' : ''}`}
+          aria-label={t('Санал болгосон хослол', 'Suggested look')}
+        >
+          {hero ? (
+            <button
+              className="dash-tile dash-tile-hero"
+              onClick={() => openWith({ page: 'studio', garmentIds: outfit.map((g) => g.id) })}
+            >
+              <span className="dash-tile-media">
+                <img src={hero.image} alt={hero.name} />
+              </span>
+              <span className="dash-tile-name">{hero.name}</span>
+            </button>
+          ) : (
+            <div className="dash-tile dash-tile-hero is-empty">
+              <span className="dash-tile-media">
+                <TShirt size={40} />
+              </span>
+            </div>
+          )}
+          {slots.map(({ category, piece }) =>
+            piece ? (
+              <button
+                key={category}
+                className="dash-tile"
+                onClick={() => openWith({ page: 'studio', garmentIds: outfit.map((g) => g.id) })}
+              >
+                <span className="dash-tile-media">
+                  <img src={piece.image} alt={piece.name} />
+                </span>
+                <span className="dash-tile-name">{piece.name}</span>
+              </button>
+            ) : (
+              <button
+                key={category}
+                className="dash-tile is-empty"
+                onClick={() => openWith({ page: 'studio', garmentIds: outfit.map((g) => g.id) })}
+              >
+                <span className="dash-tile-media">
+                  <Plus size={20} />
+                </span>
+                <span className="dash-tile-name">{slotLabels[category]}</span>
+              </button>
+            ),
+          )}
+        </div>
+      </section>
+      <div className="dash-band">
+        <section className="dash-panel dash-score-panel" aria-labelledby="score-heading">
+          <div className="dash-panel-head">
             <div>
-              <h3>{variant % 2 === 0 ? 'Everyday, elevated' : 'A softer kind of day'}</h3>
+              <h3 id="score-heading">{t('Стилийн оноо', 'Style score')}</h3>
               <p>
-                {look.length} pieces <span>·</span> Easy layers, endless possibilities
+                {t(
+                  `${scored.length} хослол үнэлсэн`,
+                  `${scored.length} ${scored.length === 1 ? 'outfit' : 'outfits'} rated`,
+                )}
               </p>
             </div>
-            <div className="today-buttons">
+            <span className="badge">{t('Жишээ', 'Sample')}</span>
+          </div>
+          <p className="dash-figure">
+            <strong>{average ?? '—'}</strong>
+            <span>/ 100</span>
+          </p>
+          <ul className="dash-bars">
+            {dimensions.map(({ key, value }) => (
+              <li key={key}>
+                <span>{dimensionLabels[key]}</span>
+                <i>
+                  <b style={{ width: `${((value ?? 0) / 25) * 100}%` }} />
+                </i>
+              </li>
+            ))}
+          </ul>
+          <button className="text-link dash-panel-link" onClick={() => navigate('history')}>
+            {t('Дэлгэрэнгүй харах', 'See details')} <ArrowRight size={16} />
+          </button>
+        </section>
+        <section className="dash-panel dash-week-panel" aria-labelledby="week-heading">
+          <div className="dash-panel-head">
+            <div>
+              <h3 id="week-heading">{t('Энэ долоо хоног', 'This week')}</h3>
+              <p>{weekLabel}</p>
+            </div>
+            <div className="dash-week-nav">
               <button
-                className="icon-button shuffle-button"
-                title="Try another combination"
-                aria-label="Try another combination"
-                onClick={() => setVariant((v) => v + 1)}
+                className="icon-button"
+                aria-label={t('Өмнөх долоо хоног', 'Previous week')}
+                onClick={() => moveWeek(weekOffset - 1)}
               >
-                <RefreshCw size={17} />
+                <CaretLeft size={18} />
               </button>
-              <button className="button small" disabled={!complete} onClick={() => openWear(today)}>
-                {wornToday ? <Check size={15} /> : <Plus size={15} />}{' '}
-                {wornToday ? 'Update today’s look' : 'I’m wearing this'}
+              <button
+                className="icon-button"
+                aria-label={t('Дараагийн долоо хоног', 'Next week')}
+                disabled={weekOffset >= 0}
+                onClick={() => moveWeek(weekOffset + 1)}
+              >
+                <CaretRight size={18} />
               </button>
             </div>
           </div>
-          <div className="today-footnote">
-            <span>
-              <span className="status-dot" /> Available pieces only
+          <div className="dash-week">
+            {days.map((d) => {
+              const date = localDate(d);
+              const cover = dayCover(date);
+              return (
+                <button
+                  key={date}
+                  className={`${selectedDate === date ? 'selected' : ''} ${date === today ? 'is-today' : ''} ${cover ? 'has-cover' : ''}`}
+                  aria-label={`${formatDate(d, 'weekday')}${cover ? t(', хослол тэмдэглэсэн', ', outfit logged') : ''}`}
+                  aria-pressed={selectedDate === date}
+                  disabled={date > today}
+                  onClick={() => setSelectedDate(date)}
+                >
+                  <span>{weekdayShort(d)}</span>
+                  <i>{cover ? <img src={cover.image} alt="" /> : <b>{d.getDate()}</b>}</i>
+                </button>
+              );
+            })}
+          </div>
+          <div className="dash-day">
+            <span className="dash-day-label">
+              {selectedDate === today ? t('Өнөөдөр', 'Today') : weekdayName(selectedDate)}
+              <small>{formatDate(selectedDate)}</small>
             </span>
-            <button
-              onClick={() => {
-                if (!complete) return;
-                saveLook({
-                  name: variant % 2 === 0 ? 'Everyday, elevated' : 'A softer kind of day',
-                  garmentIds: look.map((g) => g.id),
-                });
-              }}
-              disabled={!complete}
-            >
-              <Heart size={13} /> Save for another day
+            {record ? (
+              <span className="dash-day-pieces">
+                {record.garmentIds
+                  .map(findPiece)
+                  .filter((g): g is Garment => !!g)
+                  .slice(0, 5)
+                  .map((g) => (
+                    <span key={g.id} className="dash-thumb">
+                      <img src={g.image} alt={g.name} title={g.name} />
+                    </span>
+                  ))}
+              </span>
+            ) : (
+              <span className="dash-day-empty">
+                {t('Одоохондоо тэмдэглээгүй', 'Nothing logged yet')}
+              </span>
+            )}
+          </div>
+          <div className="dash-panel-foot">
+            <span>
+              {t(`${loggedThisWeek}/7 өдөр тэмдэглэсэн`, `${loggedThisWeek}/7 days logged`)}
+            </span>
+            <button className="text-link" onClick={() => openWear()}>
+              <Plus size={16} />{' '}
+              {record
+                ? t('Энэ өдрийг засах', 'Edit this day')
+                : t('Өмссөнөө тэмдэглэх', 'Log what you wore')}
             </button>
           </div>
         </section>
-        <div className="dashboard-side">
-          <section className="card score-card">
-            <div className="section-heading">
-              <div>
-                <div className="eyebrow">YOUR STYLE, EVOLVING</div>
-                <h2>Looking more like you.</h2>
-              </div>
-              <button
-                className="circle-link"
-                aria-label="View style history"
-                onClick={() => navigate('history')}
-              >
-                <ArrowUpRight size={18} />
-              </button>
+        <section className="dash-panel dash-closet-panel" aria-labelledby="wardrobe-heading">
+          <div className="dash-panel-head">
+            <div>
+              <h3 id="wardrobe-heading">{t('Таны шүүгээ', 'Your wardrobe')}</h3>
+              <p>{t(`${categories.length} ангилалд`, `Across ${categories.length} categories`)}</p>
             </div>
-            <div className="score-content">
-              <div
-                className="score-ring"
-                style={{ '--score': `${(average ?? 0) * 3.6}deg` } as React.CSSProperties}
-              >
-                <div>
-                  <strong>{average ?? '—'}</strong>
-                  <span>STYLE SCORE</span>
-                </div>
-              </div>
-              <div className="score-summary">
-                <span className="badge">Sample insights</span>
-                <strong>A considered combination.</strong>
-                <p>
-                  Explore the details behind
-                  <br />
-                  your personal style.
-                </p>
-                <button className="text-link" onClick={() => navigate('history')}>
-                  See your breakdown <ArrowRight size={14} />
-                </button>
-              </div>
-            </div>
-            <div className="score-stat-row">
-              <div>
-                <b>{data.analyses.length}</b>
-                <span>Looks analyzed</span>
-              </div>
-              <div>
-                <b>{data.wearLogs.length}</b>
-                <span>Days recorded</span>
-              </div>
-              <div>
-                <b>{data.savedLooks.length}</b>
-                <span>Looks saved</span>
-              </div>
-            </div>
-          </section>
-          <section className="card calendar-card">
-            <div className="calendar-header">
-              <div>
-                <div className="eyebrow">YOUR STYLE STORY</div>
-                <h2>{month}</h2>
-              </div>
-              <div className="calendar-controls">
-                {weekOffset < 0 && <button onClick={() => moveWeek(0)}>Today</button>}
-                <button aria-label="Previous week" onClick={() => moveWeek(weekOffset - 1)}>
-                  <ChevronLeft size={16} />
-                </button>
-                <button
-                  aria-label="Next week"
-                  disabled={weekOffset >= 0}
-                  onClick={() => moveWeek(weekOffset + 1)}
-                >
-                  <ChevronRight size={16} />
-                </button>
-              </div>
-            </div>
-            <div className="week-strip">
-              {days.map((d) => {
-                const date = localDate(d);
-                const recorded = data.wearLogs.some((w) => w.date === date);
-                return (
-                  <button
-                    key={date}
-                    className={`${selectedDate === date ? 'selected' : ''} ${date === today ? 'is-today' : ''}`}
-                    aria-label={`${d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}${recorded ? ', outfit recorded' : ''}`}
-                    aria-pressed={selectedDate === date}
-                    disabled={date > today}
-                    onClick={() => setSelectedDate(date)}
-                  >
-                    <span>{d.toLocaleDateString('en-US', { weekday: 'short' }).slice(0, 1)}</span>
-                    <b>{d.getDate()}</b>
-                    <i className={recorded ? 'recorded' : ''} />
-                  </button>
-                );
-              })}
-            </div>
-            <div className="calendar-bottom">
-              <span>
-                <i />
-                {record
-                  ? `${record.garmentIds.length} pieces recorded`
-                  : 'Every day is a fresh start'}
-              </span>
-              <button className="text-link" onClick={() => openWear()}>
-                {record ? 'Edit look' : 'Log a look'} <Plus size={13} />
-              </button>
-            </div>
-          </section>
-        </div>
-      </div>
-      <section className="wardrobe-preview">
-        <div className="section-heading">
-          <div>
-            <div className="eyebrow">GOOD THINGS YOU ALREADY OWN</div>
-            <h2>
-              A wardrobe full of possibilities
-              <span className="count-pill">{data.garments.length}</span>
-            </h2>
+            <button className="text-link" onClick={() => navigate('wardrobe')}>
+              {t('Нээх', 'Open')} <ArrowRight size={16} />
+            </button>
           </div>
-          <button className="text-link" onClick={() => navigate('wardrobe')}>
-            Open my wardrobe <ArrowRight size={16} />
-          </button>
+          <p className="dash-figure">
+            <strong>{data.garments.length}</strong>
+            <span>{t('хувцас', data.garments.length === 1 ? 'piece' : 'pieces')}</span>
+          </p>
+          <ul className="dash-health">
+            <li>
+              {t('Өмсөхөд бэлэн', 'Ready to wear')}
+              <b>{data.garments.length - laundry}</b>
+            </li>
+            <li>
+              {t('Угаалгад байгаа', 'In the laundry')}
+              <b>{laundry}</b>
+            </li>
+            <li>
+              {t('30 хоног өмсөөгүй', 'Not worn in 30 days')}
+              <b>{idle.length}</b>
+            </li>
+          </ul>
+          {idle.length > 0 && (
+            <button
+              className="text-link dash-panel-link"
+              onClick={() => openWith({ page: 'wardrobe', filter: 'idle' })}
+            >
+              {t('Мартагдсан хувцсаа дахин нээх', 'Rediscover forgotten pieces')}{' '}
+              <ArrowRight size={16} />
+            </button>
+          )}
+        </section>
+      </div>
+      <section className="dash-section" aria-labelledby="edits-heading">
+        <div className="dash-section-head">
+          <h2 id="edits-heading">{t('Сонгосон цуглуулга', 'Curated edits')}</h2>
         </div>
-        <div className="preview-grid">
-          {data.garments.slice(0, 4).map((g) => (
-            <article className="preview-garment" key={g.id}>
-              <div className="preview-garment-image">
-                <button
-                  className="image-link"
-                  onClick={() => navigate('wardrobe')}
-                  aria-label={`View ${g.name}`}
-                >
-                  <img src={g.image} alt={g.name} />
-                </button>
-                <span className="preview-category">{categoryLabels[g.category]}</span>
-                <button
-                  className={`favorite-button ${g.favorite ? 'is-favorite' : ''}`}
-                  aria-label={`${g.favorite ? 'Unfavorite' : 'Favorite'} ${g.name}`}
-                  aria-pressed={g.favorite}
-                  onClick={() => updateGarment(g.id, { favorite: !g.favorite })}
-                >
-                  <Heart size={16} fill={g.favorite ? 'currentColor' : 'none'} />
-                </button>
-              </div>
-              <div className="preview-garment-info">
-                <h3>{g.name}</h3>
-                <div>
-                  <span className="color-dot" style={{ background: g.colorHex }} />
-                  {g.color}
-                  <span className="garment-status">
-                    {g.availability === 'available' ? 'Ready to wear' : 'In the laundry'}
-                  </span>
-                </div>
-              </div>
-            </article>
-          ))}
+        <div className="dash-edits">
+          {edits().map((edit) => {
+            const items = data.garments.filter(edit.match);
+            if (!items.length) return null;
+            return (
+              <button
+                key={edit.title}
+                className="dash-edit"
+                onClick={() =>
+                  openWith({ page: 'wardrobe', audience: edit.audience, style: edit.style })
+                }
+              >
+                <span className="dash-edit-images" aria-hidden="true">
+                  {varied(items, 3).map((g) => (
+                    <img key={g.id} src={g.image} alt="" />
+                  ))}
+                </span>
+                <span className="dash-edit-copy">
+                  <strong>{edit.title}</strong>
+                  <small>{edit.text}</small>
+                  <em>
+                    {pieceCount(items.length)} <ArrowRight size={16} />
+                  </em>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
-      <div className="intent-note">
-        <span>✦</span>
-        <p>
-          The best wardrobe isn’t a bigger one. It’s the one that feels more like{' '}
-          <strong>you.</strong>
-        </p>
-        <span>✦</span>
-      </div>
+      <section className="dash-section" aria-labelledby="types-heading">
+        <div className="dash-section-head">
+          <h2 id="types-heading">{t('Төрлөөр үзэх', 'Browse by category')}</h2>
+          <button className="text-link" onClick={() => navigate('wardrobe')}>
+            {t('Миний шүүгээг нээх', 'Open my wardrobe')} <ArrowRight size={16} />
+          </button>
+        </div>
+        <div className="dash-types">
+          {categories.map((category) => {
+            const items = data.garments.filter((g) => g.category === category);
+            const cover = items.find((g) => g.favorite) ?? items[0];
+            return (
+              <button
+                key={category}
+                className="dash-type"
+                onClick={() => openWith({ page: 'wardrobe', category })}
+              >
+                <span className="dash-type-image">
+                  {cover ? <img src={cover.image} alt="" /> : <TShirt size={28} />}
+                </span>
+                <strong>{categoryLabels[category]}</strong>
+                <small>{pieceCount(items.length)}</small>
+              </button>
+            );
+          })}
+        </div>
+      </section>
       {wearOpen && (
-        <Dialog title="What did you wear?" onClose={() => setWearOpen(false)}>
-          <p className="muted">A small record of your day. Choose the pieces you actually wore.</p>
+        <Dialog title={t('Юу өмссөн бэ?', 'What did you wear?')} onClose={() => setWearOpen(false)}>
+          <p className="muted">
+            {t(
+              'Өдрийнхөө товч тэмдэглэл. Бодитоор өмссөн хувцсаа сонгоно уу.',
+              'A small record of your day. Choose the pieces you actually wore.',
+            )}
+          </p>
           <label className="field-label" htmlFor="wear-date">
-            Date
+            {t('Огноо', 'Date')}
           </label>
           <input
             id="wear-date"
@@ -358,12 +610,16 @@ export function Home() {
                   )
                 }
               >
-                <img src={g.image} alt="" />
+                <span className="wear-thumb">
+                  <img src={g.image} alt="" />
+                </span>
                 <span>
                   {g.name}
-                  {data.archivedGarments.some((item) => item.id === g.id) ? ' · Archived' : ''}
+                  {data.archivedGarments.some((item) => item.id === g.id)
+                    ? t(' · Архивласан', ' · Archived')
+                    : ''}
                 </span>
-                {wearIds.includes(g.id) && <Check size={17} />}
+                {wearIds.includes(g.id) && <Check size={18} />}
               </button>
             ))}
           </div>
@@ -375,50 +631,11 @@ export function Home() {
               setWearOpen(false);
             }}
           >
-            <Check size={16} /> Save wear record
+            <Check size={18} /> {t('Өмссөн бүртгэл хадгалах', 'Save to wear log')}
           </button>
         </Dialog>
       )}
-      {analysisOpen && (
-        <Dialog title="A fresh perspective on your outfit" onClose={() => setAnalysisOpen(false)}>
-          <div className="analysis-intro">
-            <div className="feature-icon">
-              <Camera size={26} />
-            </div>
-            <h3>A little insight goes a long way.</h3>
-            <p className="muted">
-              Get a breakdown of color harmony, hairstyle, accessories and styling coherence from
-              your outfit photo.
-            </p>
-          </div>
-          <div className="notice">
-            <Sparkles size={18} />
-            <p>
-              Real photo analysis needs a connected Oyu AI account and your AI-processing consent.
-              This sample workspace contains illustrative results only.
-            </p>
-          </div>
-          <button
-            className="button full-width"
-            onClick={() => {
-              setAnalysisOpen(false);
-              openAccount();
-            }}
-          >
-            Connect my account <ArrowUpRight size={16} />
-          </button>
-          <button
-            className="button ghost full-width"
-            onClick={() => {
-              setAnalysisOpen(false);
-              navigate('history');
-              notify('These are illustrative sample analyses, not AI assessments of your photos.');
-            }}
-          >
-            Explore sample analyses
-          </button>
-        </Dialog>
-      )}
+      {analysisOpen && <OyuOutfitCheck onClose={() => setAnalysisOpen(false)} />}
     </div>
   );
 }

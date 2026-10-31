@@ -54,7 +54,8 @@ describe('direct Decart status and error boundary', () => {
       json({
         configured: true,
         model: 'lucy-vton-3.6',
-        maxDurationSeconds: 60,
+        maxDurationSeconds: null,
+        speed: 'fast',
         transport: 'websocket-init',
         requiresSignIn: true,
         secret: 'ignored',
@@ -63,7 +64,8 @@ describe('direct Decart status and error boundary', () => {
     expect(await decartStatus()).toEqual({
       configured: true,
       model: 'lucy-vton-3.6',
-      maxDurationSeconds: 60,
+      maxDurationSeconds: null,
+      fast: true,
       transport: 'websocket-init',
       requiresSignIn: true,
     });
@@ -125,6 +127,7 @@ describe('direct Decart status and error boundary', () => {
       configured: false,
       model: 'lucy-vton-3.5',
       maxDurationSeconds: 60,
+      fast: false,
     });
     const [url, options] = fetcher.mock.calls[0];
     expect(url).toBe('/__lookluxe/decart/status');
@@ -157,7 +160,7 @@ describe('direct Decart status and error boundary', () => {
     } catch (error) {
       expect(error).toBeInstanceOf(DecartApiError);
       expect(error).toMatchObject({ code: 'provider_unavailable', status: 503 });
-      expect(decartErrorMessage(error)).toContain('temporarily unavailable');
+      expect(decartErrorMessage(error)).toContain('түр ажиллахгүй');
       expect(decartErrorMessage(error)).not.toMatch(/sensitive|must-not-echo/);
     }
     expect(decartErrorMessage(new Error('unsafe detail'))).not.toContain('unsafe detail');

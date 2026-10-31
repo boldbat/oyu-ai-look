@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { Cloud, CloudDownload, CloudUpload, LogOut, Trash2 } from 'lucide-react';
+import { CloudArrowDown, CloudArrowUp, GoogleLogo, SignOut, Trash } from '@phosphor-icons/react';
 import { Dialog } from '../components/Dialog';
 import { useApp } from '../lib/store';
 import type { CloudUser, SavedCloudPreferences } from '../lib/firebase-preferences';
+import { formatDateTime } from '../lib/i18n';
+import { localized, t } from '../lib/lang';
 import './cloud-preferences.css';
 
 type CloudClient = typeof import('../lib/firebase-preferences');
 type Action = 'connect' | 'disconnect' | 'save' | 'load' | 'remove';
+const themeLabels = localized({
+  light: ['Цайвар', 'Light'],
+  dark: ['Бараан', 'Dark'],
+  system: ['Системийн', 'System'],
+});
 
 export function CloudPreferences() {
   const { data, page, updatePreferences } = useApp();
@@ -50,7 +57,12 @@ export function CloudPreferences() {
       })
       .catch(() => {
         if (active)
-          setError('Cloud preferences could not load. Your local workspace is still available.');
+          setError(
+            t(
+              'Үүлэн тохиргоог ачаалж чадсангүй. Энэ төхөөрөмжийн орчин хэвээр ашиглагдана.',
+              'Cloud preferences couldn’t load. Your local workspace is still available.',
+            ),
+          );
       });
     return () => {
       active = false;
@@ -75,11 +87,29 @@ export function CloudPreferences() {
         const saved = await client.loadCloudPreferences(user!.uid);
         if (operation.current !== current) return;
         if (saved) setPreview(saved);
-        else setMessage('No preferences saved yet. Save this device’s preferences to get started.');
+        else
+          setMessage(
+            t(
+              'Хадгалсан тохиргоо алга. Эхлэхийн тулд энэ төхөөрөмжийн тохиргоог хадгална уу.',
+              'No saved preferences yet. Save this device’s preferences to get started.',
+            ),
+          );
       }
       if (operation.current !== current) return;
-      if (action === 'save') setMessage('Your preferences are saved to your Google account.');
-      if (action === 'remove') setMessage('Cloud preferences removed. This device is unchanged.');
+      if (action === 'save')
+        setMessage(
+          t(
+            'Тохиргоо таны Google бүртгэлд хадгалагдлаа.',
+            'Your preferences are saved to your Google account.',
+          ),
+        );
+      if (action === 'remove')
+        setMessage(
+          t(
+            'Үүлэн тохиргоог устгалаа. Энэ төхөөрөмж өөрчлөгдөөгүй.',
+            'Cloud preferences removed. This device is unchanged.',
+          ),
+        );
     } catch (failure) {
       if (operation.current === current) setError(client.cloudErrorMessage(failure));
     } finally {
@@ -90,133 +120,185 @@ export function CloudPreferences() {
   if (page !== 'settings') return null;
   return (
     <section
-      className="card settings-card cloud-preferences"
+      className="settings-section cloud-preferences"
       aria-labelledby="cloud-preferences-title"
     >
-      <div className="section-heading">
-        <div>
-          <h2 id="cloud-preferences-title">Your style, wherever you go</h2>
-          <p className="muted">
-            Keep your name, style choices and appearance with your Google account.
+      <header>
+        <h2 id="cloud-preferences-title">{t('Үүлэн хадгалалт', 'Cloud backup')}</h2>
+        <p>
+          {t(
+            'Нэр, стилийн сонголт, харагдах байдлаа Google бүртгэлдээ хадгална.',
+            'Keep your name, style choices and appearance with your Google account.',
+          )}
+        </p>
+      </header>
+      <div className="settings-body">
+        <p className="cloud-preferences-disclosure">
+          {t(
+            'Тохиргоогоо хүссэн үедээ хадгалах эсвэл ашиглах боломжтой. Шүүгээ, зураг, хадгалсан хослол болон шууд өмсөж үзэх өрөө одоогийн холболтоороо хэвээр ажиллана.',
+            'Save or apply your preferences whenever you like. Your wardrobe, photos, saved looks and live try-on keep working on their current connection.',
+          )}
+        </p>
+        {!ready && !error && (
+          <p role="status">
+            {t('Үүлэн тохиргоонд холбогдож байна…', 'Connecting to cloud preferences…')}
           </p>
-        </div>
-        <Cloud className="cloud-preferences-icon" size={25} aria-hidden="true" />
+        )}
+        {!ready && error && (
+          <button
+            className="button secondary small"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
+            {t('Дахин оролдох', 'Try again')}
+          </button>
+        )}
+        {ready && !user && (
+          <button
+            className="button secondary"
+            disabled={!!busy}
+            onClick={() => void perform('connect')}
+          >
+            <GoogleLogo size={17} />
+            {busy === 'connect'
+              ? t('Google нээж байна…', 'Opening Google…')
+              : t('Google-ээр үргэлжлүүлэх', 'Continue with Google')}
+          </button>
+        )}
+        {ready && user && (
+          <>
+            <div className="cloud-preferences-account">
+              <span>
+                <strong>
+                  {user.displayName || t('Google-ээр холбогдсон', 'Connected with Google')}
+                </strong>
+                {user.email && <small>{user.email}</small>}
+              </span>
+              <button
+                className="button ghost small"
+                disabled={!!busy}
+                onClick={() => void perform('disconnect')}
+              >
+                <SignOut size={14} weight="regular" /> {t('Гарах', 'Sign out')}
+              </button>
+            </div>
+            <div className="cloud-preferences-actions">
+              <button
+                className="button small"
+                disabled={!!busy}
+                onClick={() => void perform('save')}
+              >
+                <CloudArrowUp size={15} weight="regular" />{' '}
+                {busy === 'save'
+                  ? t('Хадгалж байна…', 'Saving…')
+                  : t('Тохиргоо хадгалах', 'Save preferences')}
+              </button>
+              <button
+                className="button secondary small"
+                disabled={!!busy}
+                onClick={() => void perform('load')}
+              >
+                <CloudArrowDown size={15} weight="regular" />{' '}
+                {busy === 'load'
+                  ? t('Ачааллаж байна…', 'Loading…')
+                  : t('Хадгалсан тохиргоо ачаалах', 'Load saved preferences')}
+              </button>
+              <button
+                className="button ghost small danger-text"
+                disabled={!!busy}
+                onClick={() => setRemoveOpen(true)}
+              >
+                <Trash size={14} weight="regular" />{' '}
+                {t('Үүлэн хуулбар устгах', 'Remove cloud copy')}
+              </button>
+            </div>
+          </>
+        )}
+        {error && (
+          <p className="cloud-preferences-error" role="alert">
+            {error}
+          </p>
+        )}
+        {message && (
+          <p className="cloud-preferences-message" role="status">
+            {message}
+          </p>
+        )}
+        <small className="cloud-preferences-provider">
+          {t('Google нэвтрэлт · Firebase-д хадгална', 'Google sign-in · Saved with Firebase')}
+        </small>
       </div>
-      <p className="cloud-preferences-disclosure">
-        Save or apply preferences when you choose. Your wardrobe, photos, saved outfits and live
-        fitting room stay on their current connection.
-      </p>
-      {!ready && !error && <p role="status">Connecting to cloud preferences…</p>}
-      {!ready && error && (
-        <button className="button secondary small" onClick={() => setAttempt((value) => value + 1)}>
-          Try again
-        </button>
-      )}
-      {ready && !user && (
-        <button
-          className="button secondary"
-          disabled={!!busy}
-          onClick={() => void perform('connect')}
-        >
-          <Cloud size={16} /> {busy === 'connect' ? 'Opening Google…' : 'Continue with Google'}
-        </button>
-      )}
-      {ready && user && (
-        <>
-          <div className="cloud-preferences-account">
-            <span>
-              <strong>{user.displayName || 'Connected with Google'}</strong>
-              {user.email && <small>{user.email}</small>}
-            </span>
-            <button
-              className="button ghost small"
-              disabled={!!busy}
-              onClick={() => void perform('disconnect')}
-            >
-              <LogOut size={14} /> Sign out
-            </button>
-          </div>
-          <div className="cloud-preferences-actions">
-            <button className="button small" disabled={!!busy} onClick={() => void perform('save')}>
-              <CloudUpload size={15} /> {busy === 'save' ? 'Saving…' : 'Save preferences'}
-            </button>
-            <button
-              className="button secondary small"
-              disabled={!!busy}
-              onClick={() => void perform('load')}
-            >
-              <CloudDownload size={15} /> {busy === 'load' ? 'Loading…' : 'Load saved preferences'}
-            </button>
-            <button
-              className="button ghost small danger-text"
-              disabled={!!busy}
-              onClick={() => setRemoveOpen(true)}
-            >
-              <Trash2 size={14} /> Remove cloud copy
-            </button>
-          </div>
-        </>
-      )}
-      {error && (
-        <p className="cloud-preferences-error" role="alert">
-          {error}
-        </p>
-      )}
-      {message && (
-        <p className="cloud-preferences-message" role="status">
-          {message}
-        </p>
-      )}
-      <small className="cloud-preferences-provider">Google sign-in · Saved with Firebase</small>
       {preview && (
-        <Dialog title="Use your saved preferences?" onClose={() => setPreview(null)}>
+        <Dialog
+          title={t('Хадгалсан тохиргоогоо ашиглах уу?', 'Use your saved preferences?')}
+          onClose={() => setPreview(null)}
+        >
           <p className="muted">
-            This updates your display name, style choices and appearance on this device. Your
-            wardrobe and saved outfits stay as they are.
+            {t(
+              'Энэ төхөөрөмж дээрх таны нэр, стилийн сонголт, харагдах байдлыг шинэчилнэ. Шүүгээ болон хадгалсан хослол хэвээр үлдэнэ.',
+              'This updates your name, style choices and appearance on this device. Your wardrobe and saved looks stay as they are.',
+            )}
           </p>
           <dl className="cloud-preferences-preview">
             <div>
-              <dt>Name</dt>
+              <dt>{t('Нэр', 'Name')}</dt>
               <dd>{preview.preferences.name}</dd>
             </div>
             <div>
-              <dt>Styles</dt>
-              <dd>{preview.preferences.styles.join(', ') || 'No styles selected'}</dd>
+              <dt>{t('Стиль', 'Styles')}</dt>
+              <dd>
+                {preview.preferences.styles.join(', ') ||
+                  t('Стиль сонгоогүй', 'No styles selected')}
+              </dd>
             </div>
             <div>
-              <dt>Appearance</dt>
-              <dd>{preview.preferences.theme}</dd>
+              <dt>{t('Харагдах байдал', 'Appearance')}</dt>
+              <dd>{themeLabels[preview.preferences.theme]}</dd>
             </div>
           </dl>
           {preview.updatedAt && (
-            <p className="muted">Saved {new Date(preview.updatedAt).toLocaleString()}</p>
+            <p className="muted">
+              {t(
+                `Хадгалсан: ${formatDateTime(new Date(preview.updatedAt))}`,
+                `Saved ${formatDateTime(new Date(preview.updatedAt))}`,
+              )}
+            </p>
           )}
           <div className="dialog-actions">
             <button className="button secondary" onClick={() => setPreview(null)}>
-              Keep this device’s preferences
+              {t('Энэ төхөөрөмжийн тохиргоог үлдээх', 'Keep this device’s preferences')}
             </button>
             <button
               className="button"
               onClick={() => {
                 updatePreferences(preview.preferences);
                 setPreview(null);
-                setMessage('Saved preferences applied to this device.');
+                setMessage(
+                  t(
+                    'Хадгалсан тохиргоог энэ төхөөрөмжид ашиглалаа.',
+                    'Saved preferences applied to this device.',
+                  ),
+                );
               }}
             >
-              Apply saved preferences
+              {t('Хадгалсан тохиргоог ашиглах', 'Apply saved preferences')}
             </button>
           </div>
         </Dialog>
       )}
       {removeOpen && (
-        <Dialog title="Remove your cloud preferences?" onClose={() => setRemoveOpen(false)}>
+        <Dialog
+          title={t('Үүлэн тохиргоогоо устгах уу?', 'Remove your cloud preferences?')}
+          onClose={() => setRemoveOpen(false)}
+        >
           <p className="muted">
-            This removes the saved preferences from your Google account. It does not change this
-            device’s settings or delete your account.
+            {t(
+              'Энэ нь таны Google бүртгэлээс хадгалсан тохиргоог устгана. Энэ төхөөрөмжийн тохиргоог өөрчлөхгүй, бүртгэлийг тань устгахгүй.',
+              'This removes the saved preferences from your Google account. It doesn’t change this device’s settings or delete your account.',
+            )}
           </p>
           <div className="dialog-actions">
             <button className="button secondary" onClick={() => setRemoveOpen(false)}>
-              Keep cloud copy
+              {t('Үүлэн хуулбарыг үлдээх', 'Keep cloud copy')}
             </button>
             <button
               className="button danger"
@@ -225,7 +307,7 @@ export function CloudPreferences() {
                 void perform('remove');
               }}
             >
-              Remove cloud copy
+              {t('Үүлэн хуулбар устгах', 'Remove cloud copy')}
             </button>
           </div>
         </Dialog>

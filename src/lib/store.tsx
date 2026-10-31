@@ -1,27 +1,51 @@
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import type { Garment, Page, Preferences, SavedLook, Workspace } from './types';
-import { isCompleteLook, localDate, makeDemo } from './demo';
+import type {
+  Audience,
+  Category,
+  Garment,
+  Page,
+  Preferences,
+  SavedLook,
+  StyleTag,
+  Workspace,
+} from './types';
+import { isCompleteLook, localDate, localizeSample, makeDemo } from './demo';
+import { setLang, t } from './lang';
 import {
   archiveGarment,
   parseWorkspace,
   recordWear,
   restoreGarment as restoreArchivedGarment,
+  upgradeSample,
 } from './workspace';
 const KEY = 'lookluxe.workspace.v1';
 function restore(): Workspace {
   try {
     const raw = localStorage.getItem(KEY);
-    if (raw) return parseWorkspace(raw) ?? makeDemo();
+    const stored = raw ? parseWorkspace(raw) : null;
+    if (stored) return upgradeSample(stored);
   } catch {
     /* unavailable storage uses this session */
   }
   return makeDemo();
 }
+/** A request to open a page in a particular state, e.g. a garment preselected for try-on. */
+export interface PageIntent {
+  page: Page;
+  category?: Category | 'all';
+  filter?: string;
+  audience?: Audience | 'all';
+  style?: StyleTag | 'all';
+  garmentIds?: string[];
+  nonce: number;
+}
 interface AppContextValue {
   data: Workspace;
   page: Page;
   navigate: (page: Page) => void;
+  intent: PageIntent | null;
+  openWith: (intent: Omit<PageIntent, 'nonce'>) => void;
   search: string;
   setSearch: (value: string) => void;
   addGarment: (garment: Omit<Garment, 'id' | 'addedAt'>) => void;
@@ -42,7 +66,9 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | null>(null);
 function getPage(): Page {
   const p = window.location.hash.slice(1);
-  return ['home', 'wardrobe', 'studio', 'live', 'history', 'settings'].includes(p) ? (p as Page) : 'home';
+  return ['home', 'wardrobe', 'studio', 'live', 'history', 'settings'].includes(p)
+    ? (p as Page)
+    : 'home';
 }
 export function AppProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<Workspace>(restore);
@@ -50,12 +76,28 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [search, setSearch] = useState('');
   const [toast, setToast] = useState('');
   const [accountOpen, setAccountOpen] = useState(false);
+  const [intent, setIntent] = useState<PageIntent | null>(null);
   const notify = (message: string) => setToast(message);
+  // The saved preference decides the language before anything below renders.
+  setLang(data.preferences.language);
+  /** What pages see: sample text in the current language; stored data stays as saved. */
+  const view = useMemo(() => localizeSample(data), [data]);
+  const navigate = (p: Page) => {
+    window.location.hash = p;
+    setPage(p);
+    setSearch('');
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  };
   useEffect(() => {
     try {
       localStorage.setItem(KEY, JSON.stringify(data));
     } catch {
-      setToast('Your browser storage is full. Export your workspace from Settings to keep a copy.');
+      setToast(
+        t(
+          'Хөтчийн санах ой дүүрсэн байна. Хуулбар үлдээхийн тулд Тохиргооноос орчноо татаж аваарай.',
+          'Your browser storage is full. Download your workspace from Settings to keep a copy.',
+        ),
+      );
     }
   }, [data]);
   useEffect(() => {
@@ -84,7 +126,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [toast]);
   const value = useMemo<AppContextValue>(
     () => ({
-      data,
+      data: view,
       page,
       search,
       setSearch,
@@ -93,18 +135,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
       accountOpen,
       setAccountOpen,
       openAccount: () => setAccountOpen(true),
-      navigate: (p) => {
-        window.location.hash = p;
-        setPage(p);
-        setSearch('');
-        window.scrollTo({ top: 0, behavior: 'instant' });
+      navigate,
+      intent,
+      openWith: (next) => {
+        setIntent({ ...next, nonce: Date.now() });
+        navigate(next.page);
       },
       addGarment: (g) => {
         setData((d) => ({
           ...d,
           garments: [{ ...g, id: crypto.randomUUID(), addedAt: localDate() }, ...d.garments],
         }));
-        notify('Added to your wardrobe. A little more possibility.');
+        notify(
+          t(
+            'Шүүгээнд нэмэгдлээ. Бас нэг шинэ боломж.',
+            'Added to your wardrobe. One more way to wear it.',
+          ),
+        );
       },
       updateGarment: (id, patch) =>
         setData((d) => ({
@@ -113,11 +160,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
         })),
       deleteGarment: (id) => {
         setData((d) => archiveGarment(d, id));
-        notify('Piece archived. Your wear history is preserved.');
+        notify(
+          t(
+            'Хувцсыг архивлалаа. Өмссөн түүх хадгалагдсан.',
+            'Piece archived. Its wear history is kept.',
+          ),
+        );
       },
       restoreGarment: (id) => {
         setData((d) => restoreArchivedGarment(d, id));
-        notify('Piece restored to your wardrobe.');
+        notify(t('Хувцас шүүгээнд буцаж ирлээ.', 'The piece is back in your wardrobe.'));
       },
       saveLook: (look) => {
         if (
@@ -127,7 +179,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
             (id) => data.garments.find((g) => g.id === id)?.availability !== 'available',
           )
         ) {
-          notify('Choose a complete look with available pieces.');
+          notify(
+            t(
+              'Өмсөхөд бэлэн хувцаснаас бүрэн хослол сонгоно уу.',
+              'Choose a complete look from pieces that are ready to wear.',
+            ),
+          );
           return;
         }
         setData((d) => ({
@@ -136,32 +193,39 @@ export function AppProvider({ children }: { children: ReactNode }) {
             ? d.savedLooks.map((l) => (l.id === look.id ? { ...l, ...look } : l))
             : [{ ...look, id: crypto.randomUUID(), createdAt: localDate() }, ...d.savedLooks],
         }));
-        notify('Your look is saved.');
+        notify(t('Хослол хадгалагдлаа.', 'Look saved.'));
       },
       deleteLook: (id) => {
         setData((d) => ({ ...d, savedLooks: d.savedLooks.filter((l) => l.id !== id) }));
-        notify('Saved look removed.');
+        notify(t('Хадгалсан хослолыг устгалаа.', 'Saved look deleted.'));
       },
       logWear: (date, garmentIds) => {
         try {
           setData(recordWear(data, date, garmentIds));
           notify(
             garmentIds.length
-              ? 'Outfit recorded. Your style story, one day at a time.'
-              : 'Wear record cleared for this day.',
+              ? t(
+                  'Хослол бүртгэгдлээ. Таны стилийн түүх өдөр бүр баяжина.',
+                  'Look logged. Your style history grows every day.',
+                )
+              : t('Энэ өдрийн өмссөн бүртгэлийг цэвэрлэлээ.', 'Cleared the wear log for this day.'),
           );
         } catch (error) {
-          notify(error instanceof Error ? error.message : 'Unable to record this outfit.');
+          notify(
+            error instanceof Error
+              ? error.message
+              : t('Энэ хослолыг бүртгэж чадсангүй.', 'Couldn’t log this look.'),
+          );
         }
       },
       updatePreferences: (patch) =>
         setData((d) => ({ ...d, preferences: { ...d.preferences, ...patch } })),
       resetWorkspace: () => {
         setData(makeDemo());
-        notify('Sample workspace restored.');
+        notify(t('Жишээ орчныг сэргээлээ.', 'Sample workspace restored.'));
       },
     }),
-    [data, page, search, toast, accountOpen],
+    [data, view, page, search, toast, accountOpen, intent],
   );
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

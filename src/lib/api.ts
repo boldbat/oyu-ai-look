@@ -2,6 +2,8 @@
  * Credentials and private account data stay in memory. The sample workspace
  * deliberately has no connection to this client.
  */
+import { lang, localized, t } from './lang';
+
 export type Locale = 'en' | 'mn';
 export interface AuthUser {
   id: string;
@@ -396,55 +398,134 @@ export class ApiError extends Error {
   }
 }
 
-const problemMessages: Record<string, string> = {
-  invalid_credentials: 'That email and password do not match. Please try again.',
-  invalid_verification_code:
+const problemMessages: Record<string, string> = localized({
+  invalid_credentials: [
+    'Имэйл эсвэл нууц үг буруу байна. Дахин оролдоно уу.',
+    'That email and password don’t match. Please try again.',
+  ],
+  invalid_verification_code: [
+    'Код буруу эсвэл хугацаа нь дууссан байна. 8 оронтой кодоо шалгах эсвэл шинэ код хүснэ үү.',
     'This code is incorrect or has expired. Check all eight digits or request a new code.',
-  weak_password: 'Choose a password between 8 and 128 characters that is not commonly used.',
-  signup_disabled:
+  ],
+  weak_password: [
+    'Түгээмэл биш, 8–128 тэмдэгттэй нууц үг сонгоно уу.',
+    'Choose a password between 8 and 128 characters that isn’t commonly used.',
+  ],
+  signup_disabled: [
+    'Шинэ бүртгэл одоогоор хаалттай байна. Бүртгэлтэй хэрэглэгчид нэвтэрч болно.',
     'New account registration is currently unavailable. Existing accounts can still sign in.',
-  rate_limited: 'Too many attempts. Please wait before trying again.',
-  unauthenticated: 'Your session has ended. Please sign in again.',
-  provider_unavailable: 'This service is temporarily unavailable. Please try again later.',
-  ai_processing_consent_missing:
+  ],
+  rate_limited: [
+    'Хэт олон удаа оролдлоо. Түр хүлээгээд дахин оролдоно уу.',
+    'Too many attempts. Please wait before trying again.',
+  ],
+  unauthenticated: [
+    'Таны нэвтрэлтийн хугацаа дууссан. Дахин нэвтэрнэ үү.',
+    'Your session has ended. Please sign in again.',
+  ],
+  provider_unavailable: [
+    'Энэ үйлчилгээ түр ажиллахгүй байна. Дараа дахин оролдоно уу.',
+    'This service is temporarily unavailable. Please try again later.',
+  ],
+  ai_processing_consent_missing: [
+    'Зургийг AI-аар боловсруулахын өмнө таны тодорхой зөвшөөрөл шаардлагатай.',
     'AI processing requires your explicit consent before a photo can be processed.',
-  subscription_required:
-    'Your account does not currently include AI access. Manage your subscription in the mobile app.',
-  quota_exceeded:
+  ],
+  subscription_required: [
+    'Таны бүртгэлд одоогоор AI ашиглах эрх алга. Гишүүнчлэлээ гар утасны аппаас удирдана уу.',
+    'Your account doesn’t currently include AI access. Manage your membership in the mobile app.',
+  ],
+  quota_exceeded: [
+    'Таны бүртгэл AI ашиглалтын хязгаартаа хүрлээ. Эрх шинэчлэгдсэний дараа дахин оролдоно уу.',
     'Your account has reached its AI usage limit. Please try again when your allowance resets.',
-  validation_error: 'Some details could not be accepted. Check your entries and try again.',
-  saved_look_limit: 'Your account has reached its saved look limit.',
-  conflict: 'This change conflicts with the current item. Refresh the account and try again.',
-  not_found: 'This item is no longer available in your account.',
-  network_error: 'Could not reach the account service. Check your connection and try again.',
-  timeout: 'The account service took too long to respond. Please try again.',
-  live_tryon_active: 'Another live session is pending. Stop it before starting a new preview.',
-  live_allowance_exhausted:
-    'Your live preview allowance is used up. Check your account access before starting again.',
-  live_tryon_budget: 'Live preview is temporarily at capacity. Please try again later.',
-  live_contract_outdated:
-    'This live camera disclosure is no longer supported. Refresh the app before continuing.',
-  live_tryon_disabled: 'Live try-on is not currently enabled for this service.',
-  live_tryon_consent_changed:
+  ],
+  validation_error: [
+    'Зарим мэдээллийг хүлээн авах боломжгүй байна. Шалгаад дахин оролдоно уу.',
+    'Some details couldn’t be accepted. Check your entries and try again.',
+  ],
+  saved_look_limit: [
+    'Таны бүртгэл хадгалах хослолын хязгаартаа хүрлээ.',
+    'Your account has reached its saved look limit.',
+  ],
+  conflict: [
+    'Энэ өөрчлөлт одоогийн мэдээлэлтэй зөрчилдөж байна. Бүртгэлээ шинэчлээд дахин оролдоно уу.',
+    'This change conflicts with the current item. Refresh your account and try again.',
+  ],
+  not_found: [
+    'Энэ зүйл таны бүртгэлд байхгүй болсон байна.',
+    'This item is no longer available in your account.',
+  ],
+  network_error: [
+    'Бүртгэлийн үйлчилгээнд холбогдож чадсангүй. Интернэт холболтоо шалгаад дахин оролдоно уу.',
+    'Couldn’t reach the account service. Check your connection and try again.',
+  ],
+  timeout: [
+    'Бүртгэлийн үйлчилгээ хэт удаан хариу өгч байна. Дахин оролдоно уу.',
+    'The account service took too long to respond. Please try again.',
+  ],
+  live_tryon_active: [
+    'Өөр шууд өмсөж үзэх явц идэвхтэй байна. Шинийг эхлүүлэхийн өмнө түүнийг зогсооно уу.',
+    'Another live try-on is already active. Stop it before starting a new one.',
+  ],
+  live_allowance_exhausted: [
+    'Шууд өмсөж үзэх эрх тань дууссан. Дахин эхлүүлэхийн өмнө бүртгэлийнхээ эрхийг шалгана уу.',
+    'Your live try-on allowance is used up. Check your account access before starting again.',
+  ],
+  live_tryon_budget: [
+    'Шууд өмсөж үзэх үйлчилгээ түр ачаалалтай байна. Дараа дахин оролдоно уу.',
+    'Live try-on is temporarily at capacity. Please try again later.',
+  ],
+  live_contract_outdated: [
+    'Шууд камерын энэ нөхцөл хүчингүй болсон. Үргэлжлүүлэхийн өмнө аппаа дахин ачаална уу.',
+    'This live camera disclosure is no longer supported. Reload the app before continuing.',
+  ],
+  live_tryon_disabled: [
+    'Энэ үйлчилгээнд шууд өмсөж үзэх боломж одоогоор идэвхгүй байна.',
+    'Live try-on isn’t currently enabled for this service.',
+  ],
+  live_tryon_consent_changed: [
+    'Шууд камерын боловсруулалтын нөхцөл өөрчлөгдсөн. Дахин эхлэхийн өмнө танилцана уу.',
     'The live camera processing disclosure has changed. Review it before starting again.',
-  live_session_limit:
-    'This live session reached its time limit. Starting another session is your choice.',
-  live_preview_unavailable: 'The live preview could not continue. Your camera session has ended.',
-  live_invalid_response: 'The live service returned a response this browser cannot safely use.',
-  live_bridge_unavailable:
+  ],
+  live_session_limit: [
+    'Шууд өмсөж үзэх хугацааны хязгаарт хүрлээ. Дахин эхлүүлэх эсэхээ та өөрөө шийднэ үү.',
+    'This live try-on reached its time limit. Whether you start another is up to you.',
+  ],
+  live_preview_unavailable: [
+    'Шууд өмсөж үзэх явц үргэлжлэх боломжгүй боллоо. Камер унтарлаа.',
+    'The live try-on couldn’t continue. Your camera has been turned off.',
+  ],
+  live_invalid_response: [
+    'Шууд үйлчилгээнээс энэ хөтөч аюулгүй ашиглах боломжгүй хариу ирлээ.',
+    'The live service returned a response this browser can’t safely use.',
+  ],
+  live_bridge_unavailable: [
+    'Хөтчийн шууд холболтын үйлчилгээ ажиллахгүй байна. Дараа дахин оролдоно уу.',
     'The browser live connection service is unavailable. Please try again later.',
-  selection_invalid:
-    'Choose a top, a bottom, or a dress. A dress replaces separates, and each item can fill only one place.',
-  selection_item_unavailable:
-    'A selected garment is no longer available for live preview. Choose another piece.',
-  select_rate_limited: 'Please wait a moment before changing the live outfit again.',
-};
+  ],
+  selection_invalid: [
+    'Цамц, өмд банзал эсвэл даашинз сонгоно уу. Даашинз нь цамц, өмдийг орлох бөгөөд нэг хувцас зөвхөн нэг байрлалд байна.',
+    'Choose a top, a bottom, or a dress. A dress replaces separates, and each piece can fill only one place.',
+  ],
+  selection_item_unavailable: [
+    'Сонгосон хувцас шууд өмсөж үзэхэд боломжгүй болсон. Өөр хувцас сонгоно уу.',
+    'A selected piece is no longer available for live try-on. Choose another piece.',
+  ],
+  select_rate_limited: [
+    'Шууд хослолоо дахин солихоос өмнө түр хүлээнэ үү.',
+    'Please wait a moment before changing your live outfit again.',
+  ],
+});
 
 export function apiErrorMessage(error: unknown): string {
-  if (!(error instanceof ApiError)) return 'Something went wrong. Please try again.';
+  if (!(error instanceof ApiError))
+    return t('Алдаа гарлаа. Дахин оролдоно уу.', 'Something went wrong. Please try again.');
   const message = problemMessages[error.code] ?? error.message;
   return error.code === 'rate_limited' && error.retryAfter
-    ? `${message} Try again in ${error.retryAfter} seconds.`
+    ? t(
+        `${message} ${error.retryAfter} секундын дараа дахин оролдоно уу.`,
+        `${message} Try again in ${error.retryAfter} ${error.retryAfter === 1 ? 'second' : 'seconds'}.`,
+      )
     : message;
 }
 
@@ -459,7 +540,13 @@ export function garmentConfirmation(
 ): GarmentAttributes {
   const category = edits.category ?? source.category;
   if (!category)
-    throw new ApiError('category_required', 'Choose a category before confirming this garment.');
+    throw new ApiError(
+      'category_required',
+      t(
+        'Баталгаажуулахаас өмнө ангилал сонгоно уу.',
+        'Choose a category before confirming this piece.',
+      ),
+    );
   return {
     category,
     subcategory: source.subcategory ?? null,
@@ -495,7 +582,13 @@ function parseBaseUrl(value: string): string {
   try {
     url = new URL(value.trim());
   } catch {
-    throw new ApiError('configuration_error', 'The configured account service URL is invalid.');
+    throw new ApiError(
+      'configuration_error',
+      t(
+        'Тохируулсан бүртгэлийн үйлчилгээний хаяг буруу байна.',
+        'The configured account service URL is invalid.',
+      ),
+    );
   }
   if (
     (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback(url.hostname))) ||
@@ -506,7 +599,10 @@ function parseBaseUrl(value: string): string {
   ) {
     throw new ApiError(
       'configuration_error',
-      'The account service requires HTTPS, or HTTP on localhost for development.',
+      t(
+        'Бүртгэлийн үйлчилгээнд HTTPS шаардлагатай (хөгжүүлэлтийн үед localhost дээр HTTP болно).',
+        'The account service requires HTTPS, or HTTP on localhost for development.',
+      ),
     );
   }
   return url.href.replace(/\/+$/, '');
@@ -521,19 +617,28 @@ export class LookLuxeApi {
   private epoch = 0;
   private refreshing: Promise<void> | null = null;
   private listeners = new Set<() => void>();
-  readonly configurationError: string | null;
+  private readonly rawBaseUrl: string;
 
   constructor(baseUrl = '', fetcher: typeof fetch = globalThis.fetch.bind(globalThis)) {
     this.fetcher = fetcher;
-    let error: string | null = null;
+    this.rawBaseUrl = baseUrl;
     let normalized = '';
     try {
       normalized = parseBaseUrl(baseUrl);
-    } catch (cause) {
-      error = apiErrorMessage(cause);
+    } catch {
+      normalized = '';
     }
     this.baseUrl = normalized;
-    this.configurationError = error;
+  }
+  /** Why the account service is unavailable, in the current language (null when configured). */
+  get configurationError(): string | null {
+    if (this.baseUrl) return null;
+    try {
+      parseBaseUrl(this.rawBaseUrl);
+      return null;
+    } catch (cause) {
+      return apiErrorMessage(cause);
+    }
   }
   get configured(): boolean {
     return !!this.baseUrl;
@@ -565,7 +670,13 @@ export class LookLuxeApi {
       session.token_type !== 'bearer' ||
       !Number.isFinite(session.expires_in)
     ) {
-      throw new ApiError('invalid_response', 'The account service returned an invalid session.');
+      throw new ApiError(
+        'invalid_response',
+        t(
+          'Бүртгэлийн үйлчилгээнээс буруу нэвтрэлтийн мэдээлэл ирлээ.',
+          'The account service returned an invalid session.',
+        ),
+      );
     }
     this.session = session;
     this.expiresAt = Date.now() + session.expires_in * 1000;
@@ -576,7 +687,11 @@ export class LookLuxeApi {
     if (!this.configured)
       throw new ApiError(
         'not_configured',
-        this.configurationError ?? 'Account connection is not configured for this preview.',
+        this.configurationError ??
+          t(
+            'Энэ хувилбарт бүртгэлийн холболт тохируулагдаагүй байна.',
+            'Account connection isn’t configured for this preview.',
+          ),
       );
     const controller = new AbortController();
     const abort = () => controller.abort(options.signal?.reason);
@@ -623,7 +738,11 @@ export class LookLuxeApi {
           : null;
         throw new ApiError(
           code,
-          problemMessages[code] ?? 'The account service could not complete this request.',
+          problemMessages[code] ??
+            t(
+              'Бүртгэлийн үйлчилгээ энэ хүсэлтийг гүйцэтгэж чадсангүй.',
+              'The account service couldn’t complete this request.',
+            ),
           response.status,
           seconds !== null && Number.isFinite(seconds) ? Math.max(0, seconds) : null,
         );
@@ -635,7 +754,10 @@ export class LookLuxeApi {
       } catch {
         throw new ApiError(
           'invalid_response',
-          'The account service returned an unreadable response.',
+          t(
+            'Бүртгэлийн үйлчилгээнээс уншигдахгүй хариу ирлээ.',
+            'The account service returned an unreadable response.',
+          ),
         );
       }
     } catch (error) {
@@ -960,7 +1082,10 @@ export class LookLuxeApi {
       responseType: 'blob',
     });
     if (!['image/jpeg', 'image/png', 'image/webp'].includes(blob.type)) {
-      throw new ApiError('invalid_response', 'The garment image could not be loaded.');
+      throw new ApiError(
+        'invalid_response',
+        t('Хувцасны зургийг ачаалж чадсангүй.', 'The piece’s image couldn’t be loaded.'),
+      );
     }
     return blob;
   }
@@ -1104,7 +1229,7 @@ export class LookLuxeApi {
   createImageOperation(
     file: Blob,
     kind: 'garment' | 'score',
-    locale: Locale = 'en',
+    locale: Locale = lang(),
   ): ImageOperation {
     if (!this.currentUser)
       throw new ApiError('unauthenticated', problemMessages.unauthenticated, 401);
@@ -1113,7 +1238,13 @@ export class LookLuxeApi {
       file.size <= 0 ||
       file.size > 15 * 1024 * 1024
     ) {
-      throw new ApiError('invalid_image', 'Choose a JPEG, PNG, or WebP image up to 15 MB.');
+      throw new ApiError(
+        'invalid_image',
+        t(
+          'JPEG, PNG эсвэл WebP зураг сонгоно уу (15 MB хүртэл).',
+          'Choose a JPEG, PNG, or WebP image up to 15 MB.',
+        ),
+      );
     }
     return {
       ownerId: this.currentUser.id,
@@ -1152,7 +1283,7 @@ export class LookLuxeApi {
     }
     checkOwner();
     if (!operation.ticket) {
-      onProgress?.('Reserving private upload');
+      onProgress?.(t('Хувийн байршуулалт бэлтгэж байна', 'Reserving private upload'));
       operation.ticket = await this.request<UploadTicket>('/garment-uploads', {
         method: 'POST',
         signal,
@@ -1163,7 +1294,7 @@ export class LookLuxeApi {
     checkOwner();
     const ticket = operation.ticket;
     if (!operation.uploaded && !operation.created) {
-      onProgress?.('Uploading photo');
+      onProgress?.(t('Зураг байршуулж байна', 'Uploading photo'));
       const url = new URL(ticket.signed_upload_url);
       if (
         (url.protocol !== 'https:' && !(url.protocol === 'http:' && isLoopback(url.hostname))) ||
@@ -1172,7 +1303,10 @@ export class LookLuxeApi {
       ) {
         throw new ApiError(
           'invalid_upload_url',
-          'The account service returned an invalid upload destination.',
+          t(
+            'Бүртгэлийн үйлчилгээнээс буруу байршуулах хаяг ирлээ.',
+            'The account service returned an invalid upload destination.',
+          ),
         );
       }
       let response: Response;
@@ -1197,14 +1331,17 @@ export class LookLuxeApi {
       if (!response.ok)
         throw new ApiError(
           'upload_failed',
-          'The private photo upload failed. Please try again.',
+          t(
+            'Зургийг хувийн санд байршуулж чадсангүй. Дахин оролдоно уу.',
+            'The private photo upload failed. Please try again.',
+          ),
           response.status,
         );
       operation.uploaded = true;
     }
     checkOwner();
     if (!operation.created) {
-      onProgress?.('Submitting for processing');
+      onProgress?.(t('Боловсруулалтад илгээж байна', 'Submitting for processing'));
       operation.created = await this.request(
         operation.kind === 'garment' ? '/garments' : '/outfit-scores',
         {

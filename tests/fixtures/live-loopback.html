@@ -1,136 +1,306 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Oyu AI synthetic WebRTC loopback QA</title>
-  <style>
-    body{font-family:system-ui,sans-serif;background:#f5f2f8;color:#302739;margin:0;padding:32px;line-height:1.55}main{max-width:1050px;margin:auto}h1{font-size:27px}button{font:inherit;padding:11px 17px;border:0;border-radius:9px;background:#78628f;color:#fff;cursor:pointer;margin-right:9px}button:disabled{opacity:.5;cursor:not-allowed}.notice{border:1px solid #d4c6e0;padding:16px;background:#fff;border-radius:12px}.views{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:22px 0}.views section{background:#fff;border:1px solid #e0d7e8;padding:14px;border-radius:12px}video{width:100%;aspect-ratio:16/9;background:#292231;object-fit:contain}#remote{opacity:0}.canvas-source{display:none}#result{padding:20px;background:#fff;border-radius:12px;white-space:pre-wrap;font-family:ui-monospace,monospace;font-size:13px}#status{font-weight:600}h2{font-size:16px}.pass{color:#327441}.fail{color:#a64040}@media(max-width:650px){body{padding:18px}.views{grid-template-columns:1fr}}
-  </style>
-</head>
-<body>
-<main>
-  <h1>Synthetic WebRTC loopback QA</h1>
-  <p class="notice">This development-only page uses two generated canvas streams and real browser RTCPeerConnections. It never requests a camera, opens the Oyu AI service, starts a provider session, or sends private media. A pass validates local WebRTC negotiation, decoded-frame detection and cleanup. It does <strong>not</strong> validate AI try-on quality or production connectivity.</p>
-  <button id="run" type="button">Run synthetic loopback</button>
-  <button id="stop" type="button" disabled>Stop test</button>
-  <p id="status" role="status">Ready. The returned video starts at opacity 0 to test hidden-video frame detection.</p>
-  <div class="views">
-    <section><h2>Synthetic input — no camera</h2><video id="local" muted playsinline autoplay></video></section>
-    <section><h2>Synthetic return stream — no AI</h2><video id="remote" muted playsinline autoplay></video></section>
-  </div>
-  <canvas id="input" class="canvas-source" width="640" height="360"></canvas>
-  <canvas id="output" class="canvas-source" width="640" height="360"></canvas>
-  <pre id="result" aria-live="polite">No test has run.</pre>
-</main>
-<script type="module">
-  import { BrowserLiveCamera } from '/src/lib/live-camera.ts';
-  const run = document.getElementById('run'), stop = document.getElementById('stop');
-  const status = document.getElementById('status'), result = document.getElementById('result');
-  const local = document.getElementById('local'), remote = document.getElementById('remote');
-  const input = document.getElementById('input'), output = document.getElementById('output');
-  let cleanup = null;
-
-  run.addEventListener('click', async () => {
-    if (cleanup) return;
-    run.disabled = true; stop.disabled = false; remote.style.opacity = '0';
-    status.className = ''; status.textContent = 'Starting the synthetic streams…';
-    result.textContent = 'No camera permission or account connection is used.';
-    if (!input.captureStream || !globalThis.RTCPeerConnection) {
-      status.className = 'fail'; status.textContent = 'This browser does not support the required canvas/WebRTC APIs.';
-      run.disabled = false; stop.disabled = true; return;
-    }
-    const inputContext = input.getContext('2d'), outputContext = output.getContext('2d');
-    let frame = 0, done = false, state = null;
-    const phases = [], signals = [];
-    function paint() {
-      frame++;
-      for (const [context, label, color] of [[inputContext, 'SYNTHETIC INPUT', '#537283'], [outputContext, 'SYNTHETIC RETURN · NO AI', '#8b71a3']]) {
-        context.fillStyle = color; context.fillRect(0, 0, 640, 360);
-        context.fillStyle = '#ffffff'; context.font = '24px sans-serif'; context.fillText(label, 24, 48);
-        context.fillRect(24 + (frame * 5) % 550, 120, 34, 100);
-        context.font = '17px sans-serif'; context.fillText(`Frame ${frame}`, 24, 320);
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Oyu AI synthetic WebRTC loopback QA</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        background: #f5f2f8;
+        color: #302739;
+        margin: 0;
+        padding: 32px;
+        line-height: 1.55;
       }
-    }
-    paint(); const drawTimer = setInterval(paint, 66);
-    const inputStream = input.captureStream(15), outputStream = output.captureStream(15);
-    const answerPeer = new RTCPeerConnection({ iceServers: [] });
-    const remoteCandidates = [];
-    class LoopbackSocket extends EventTarget {
-      readyState = 1; bufferedAmount = 0;
-      send(raw) {
-        const message = JSON.parse(raw); signals.push(message.type);
-        void this.handle(message).catch(() => finish('failed', 'The local answer peer could not complete signaling.'));
+      main {
+        max-width: 1050px;
+        margin: auto;
       }
-      async handle(message) {
-        if (done) return;
-        if (message.type === 'offer') {
-          await answerPeer.setRemoteDescription({ type: 'offer', sdp: message.sdp });
-          if (done) return;
-          outputStream.getVideoTracks().forEach(track => answerPeer.addTrack(track, outputStream));
-          const answer = await answerPeer.createAnswer();
-          await answerPeer.setLocalDescription(answer);
-          if (done) return;
-          this.receive({ type: 'answer', sdp: answer.sdp });
-          while (remoteCandidates.length && !done) await answerPeer.addIceCandidate(remoteCandidates.shift());
-        } else if (message.type === 'icecandidate') {
-          if (answerPeer.remoteDescription) await answerPeer.addIceCandidate(message.candidate);
-          else remoteCandidates.push(message.candidate);
+      h1 {
+        font-size: 27px;
+      }
+      button {
+        font: inherit;
+        padding: 11px 17px;
+        border: 0;
+        border-radius: 9px;
+        background: #78628f;
+        color: #fff;
+        cursor: pointer;
+        margin-right: 9px;
+      }
+      button:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .notice {
+        border: 1px solid #d4c6e0;
+        padding: 16px;
+        background: #fff;
+        border-radius: 12px;
+      }
+      .views {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 18px;
+        margin: 22px 0;
+      }
+      .views section {
+        background: #fff;
+        border: 1px solid #e0d7e8;
+        padding: 14px;
+        border-radius: 12px;
+      }
+      video {
+        width: 100%;
+        aspect-ratio: 16/9;
+        background: #292231;
+        object-fit: contain;
+      }
+      #remote {
+        opacity: 0;
+      }
+      .canvas-source {
+        display: none;
+      }
+      #result {
+        padding: 20px;
+        background: #fff;
+        border-radius: 12px;
+        white-space: pre-wrap;
+        font-family: ui-monospace, monospace;
+        font-size: 13px;
+      }
+      #status {
+        font-weight: 600;
+      }
+      h2 {
+        font-size: 16px;
+      }
+      .pass {
+        color: #327441;
+      }
+      .fail {
+        color: #a64040;
+      }
+      @media (max-width: 650px) {
+        body {
+          padding: 18px;
+        }
+        .views {
+          grid-template-columns: 1fr;
         }
       }
-      receive(message) { if (!done) this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(message) })); }
-      close() { this.readyState = 3; }
-    }
-    const socket = new LoopbackSocket();
-    answerPeer.onicecandidate = event => {
-      if (event.candidate) socket.receive({ type: 'icecandidate', candidate: {
-        candidate: event.candidate.candidate, sdpMid: event.candidate.sdpMid, sdpMLineIndex: event.candidate.sdpMLineIndex,
-      } });
-    };
-    const controller = new BrowserLiveCamera({
-      localVideo: local, remoteVideo: remote,
-      getUserMedia: async () => inputStream,
-      onState: next => {
-        state = next;
-        if (phases.at(-1) !== next.phase) phases.push(next.phase);
-        if (done) return;
-        status.textContent = `Controller: ${next.phase}${next.code ? ` · ${next.code}` : ''}`;
-        if (next.hasRemoteFrame) remote.style.opacity = '1';
-        if (next.phase === 'failed') queueMicrotask(() => finish('failed', next.code));
-      },
-    });
-    let pollTimer = null, deadlineTimer = null;
-    function finish(outcome, reason) {
-      if (done) return;
-      const observed = { outcome, reason, phase: state?.phase, hasRemoteFrame: state?.hasRemoteFrame,
-        width: state?.width, height: state?.height, phases: [...phases], signalTypes: [...signals],
-        outputInitiallyHidden: true, syntheticMediaOnly: true };
-      done = true; clearInterval(drawTimer); clearInterval(pollTimer); clearTimeout(deadlineTimer);
-      controller.stop('live_test_completed'); answerPeer.close();
-      inputStream.getTracks().forEach(track => track.stop()); outputStream.getTracks().forEach(track => track.stop());
-      observed.localTracksStopped = inputStream.getTracks().every(track => track.readyState === 'ended');
-      observed.videosDetached = local.srcObject === null && remote.srcObject === null;
-      observed.cleanupPassed = observed.localTracksStopped && observed.videosDetached;
-      result.textContent = JSON.stringify(observed, null, 2);
-      status.className = outcome === 'passed' && observed.cleanupPassed ? 'pass' : 'fail';
-      status.textContent = outcome === 'passed' && observed.cleanupPassed ? 'PASS — local WebRTC frames received and all media released. AI try-on was not tested.' : `${outcome.toUpperCase()} — ${reason}`;
-      cleanup = null; run.disabled = false; stop.disabled = true;
-    }
-    cleanup = () => finish('stopped', 'Stopped explicitly. No provider was contacted.');
-    try {
-      await controller.prepare();
-      if (done) return;
-      controller.start({ socket, maxDurationSeconds: 20 });
-      socket.receive({ type: 'iceservers', iceServers: [] });
-      socket.receive({ type: 'ready', session_seconds_remaining: 20 });
-      pollTimer = setInterval(() => { if (state?.phase === 'live') finish('passed', 'Received a decoded synthetic return frame.'); }, 100);
-      deadlineTimer = setTimeout(() => finish('failed', 'No decoded frame within 12 seconds.'), 12000);
-    } catch {
-      finish('failed', state?.code ?? 'The synthetic camera setup could not start.');
-    }
-  });
-  stop.addEventListener('click', () => cleanup?.());
-  window.addEventListener('pagehide', () => cleanup?.());
-</script>
-</body>
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Synthetic WebRTC loopback QA</h1>
+      <p class="notice">
+        This development-only page uses two generated canvas streams and real browser
+        RTCPeerConnections. It never requests a camera, opens the Oyu AI service, starts a provider
+        session, or sends private media. A pass validates local WebRTC negotiation, decoded-frame
+        detection and cleanup. It does <strong>not</strong> validate AI try-on quality or production
+        connectivity.
+      </p>
+      <button id="run" type="button">Run synthetic loopback</button>
+      <button id="stop" type="button" disabled>Stop test</button>
+      <p id="status" role="status">
+        Ready. The returned video starts at opacity 0 to test hidden-video frame detection.
+      </p>
+      <div class="views">
+        <section>
+          <h2>Synthetic input — no camera</h2>
+          <video id="local" muted playsinline autoplay></video>
+        </section>
+        <section>
+          <h2>Synthetic return stream — no AI</h2>
+          <video id="remote" muted playsinline autoplay></video>
+        </section>
+      </div>
+      <canvas id="input" class="canvas-source" width="640" height="360"></canvas>
+      <canvas id="output" class="canvas-source" width="640" height="360"></canvas>
+      <pre id="result" aria-live="polite">No test has run.</pre>
+    </main>
+    <script type="module">
+      import { BrowserLiveCamera } from '/src/lib/live-camera.ts';
+      const run = document.getElementById('run'),
+        stop = document.getElementById('stop');
+      const status = document.getElementById('status'),
+        result = document.getElementById('result');
+      const local = document.getElementById('local'),
+        remote = document.getElementById('remote');
+      const input = document.getElementById('input'),
+        output = document.getElementById('output');
+      let cleanup = null;
+
+      run.addEventListener('click', async () => {
+        if (cleanup) return;
+        run.disabled = true;
+        stop.disabled = false;
+        remote.style.opacity = '0';
+        status.className = '';
+        status.textContent = 'Starting the synthetic streams…';
+        result.textContent = 'No camera permission or account connection is used.';
+        if (!input.captureStream || !globalThis.RTCPeerConnection) {
+          status.className = 'fail';
+          status.textContent = 'This browser does not support the required canvas/WebRTC APIs.';
+          run.disabled = false;
+          stop.disabled = true;
+          return;
+        }
+        const inputContext = input.getContext('2d'),
+          outputContext = output.getContext('2d');
+        let frame = 0,
+          done = false,
+          state = null;
+        const phases = [],
+          signals = [];
+        function paint() {
+          frame++;
+          for (const [context, label, color] of [
+            [inputContext, 'SYNTHETIC INPUT', '#537283'],
+            [outputContext, 'SYNTHETIC RETURN · NO AI', '#8b71a3'],
+          ]) {
+            context.fillStyle = color;
+            context.fillRect(0, 0, 640, 360);
+            context.fillStyle = '#ffffff';
+            context.font = '24px sans-serif';
+            context.fillText(label, 24, 48);
+            context.fillRect(24 + ((frame * 5) % 550), 120, 34, 100);
+            context.font = '17px sans-serif';
+            context.fillText(`Frame ${frame}`, 24, 320);
+          }
+        }
+        paint();
+        const drawTimer = setInterval(paint, 66);
+        const inputStream = input.captureStream(15),
+          outputStream = output.captureStream(15);
+        const answerPeer = new RTCPeerConnection({ iceServers: [] });
+        const remoteCandidates = [];
+        class LoopbackSocket extends EventTarget {
+          readyState = 1;
+          bufferedAmount = 0;
+          send(raw) {
+            const message = JSON.parse(raw);
+            signals.push(message.type);
+            void this.handle(message).catch(() =>
+              finish('failed', 'The local answer peer could not complete signaling.'),
+            );
+          }
+          async handle(message) {
+            if (done) return;
+            if (message.type === 'offer') {
+              await answerPeer.setRemoteDescription({ type: 'offer', sdp: message.sdp });
+              if (done) return;
+              outputStream
+                .getVideoTracks()
+                .forEach((track) => answerPeer.addTrack(track, outputStream));
+              const answer = await answerPeer.createAnswer();
+              await answerPeer.setLocalDescription(answer);
+              if (done) return;
+              this.receive({ type: 'answer', sdp: answer.sdp });
+              while (remoteCandidates.length && !done)
+                await answerPeer.addIceCandidate(remoteCandidates.shift());
+            } else if (message.type === 'icecandidate') {
+              if (answerPeer.remoteDescription) await answerPeer.addIceCandidate(message.candidate);
+              else remoteCandidates.push(message.candidate);
+            }
+          }
+          receive(message) {
+            if (!done)
+              this.dispatchEvent(new MessageEvent('message', { data: JSON.stringify(message) }));
+          }
+          close() {
+            this.readyState = 3;
+          }
+        }
+        const socket = new LoopbackSocket();
+        answerPeer.onicecandidate = (event) => {
+          if (event.candidate)
+            socket.receive({
+              type: 'icecandidate',
+              candidate: {
+                candidate: event.candidate.candidate,
+                sdpMid: event.candidate.sdpMid,
+                sdpMLineIndex: event.candidate.sdpMLineIndex,
+              },
+            });
+        };
+        const controller = new BrowserLiveCamera({
+          localVideo: local,
+          remoteVideo: remote,
+          getUserMedia: async () => inputStream,
+          onState: (next) => {
+            state = next;
+            if (phases.at(-1) !== next.phase) phases.push(next.phase);
+            if (done) return;
+            status.textContent = `Controller: ${next.phase}${next.code ? ` · ${next.code}` : ''}`;
+            if (next.hasRemoteFrame) remote.style.opacity = '1';
+            if (next.phase === 'failed') queueMicrotask(() => finish('failed', next.code));
+          },
+        });
+        let pollTimer = null,
+          deadlineTimer = null;
+        function finish(outcome, reason) {
+          if (done) return;
+          const observed = {
+            outcome,
+            reason,
+            phase: state?.phase,
+            hasRemoteFrame: state?.hasRemoteFrame,
+            width: state?.width,
+            height: state?.height,
+            phases: [...phases],
+            signalTypes: [...signals],
+            outputInitiallyHidden: true,
+            syntheticMediaOnly: true,
+          };
+          done = true;
+          clearInterval(drawTimer);
+          clearInterval(pollTimer);
+          clearTimeout(deadlineTimer);
+          controller.stop('live_test_completed');
+          answerPeer.close();
+          inputStream.getTracks().forEach((track) => track.stop());
+          outputStream.getTracks().forEach((track) => track.stop());
+          observed.localTracksStopped = inputStream
+            .getTracks()
+            .every((track) => track.readyState === 'ended');
+          observed.videosDetached = local.srcObject === null && remote.srcObject === null;
+          observed.cleanupPassed = observed.localTracksStopped && observed.videosDetached;
+          result.textContent = JSON.stringify(observed, null, 2);
+          status.className = outcome === 'passed' && observed.cleanupPassed ? 'pass' : 'fail';
+          status.textContent =
+            outcome === 'passed' && observed.cleanupPassed
+              ? 'PASS — local WebRTC frames received and all media released. AI try-on was not tested.'
+              : `${outcome.toUpperCase()} — ${reason}`;
+          cleanup = null;
+          run.disabled = false;
+          stop.disabled = true;
+        }
+        cleanup = () => finish('stopped', 'Stopped explicitly. No provider was contacted.');
+        try {
+          await controller.prepare();
+          if (done) return;
+          controller.start({ socket, maxDurationSeconds: 20 });
+          socket.receive({ type: 'iceservers', iceServers: [] });
+          socket.receive({ type: 'ready', session_seconds_remaining: 20 });
+          pollTimer = setInterval(() => {
+            if (state?.phase === 'live')
+              finish('passed', 'Received a decoded synthetic return frame.');
+          }, 100);
+          deadlineTimer = setTimeout(
+            () => finish('failed', 'No decoded frame within 12 seconds.'),
+            12000,
+          );
+        } catch {
+          finish('failed', state?.code ?? 'The synthetic camera setup could not start.');
+        }
+      });
+      stop.addEventListener('click', () => cleanup?.());
+      window.addEventListener('pagehide', () => cleanup?.());
+    </script>
+  </body>
 </html>

@@ -1,0 +1,1051 @@
+/* Oyu, the companion stylist: shared figure, score, notes, the floating panel and the
+   live-stage overlay. */
+
+.oyu-figure {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+}
+.oyu-figure img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  opacity: 0;
+  transform: scale(0.95) translateY(2px);
+  transition:
+    opacity 0.28s var(--ease),
+    transform 0.4s var(--ease);
+}
+.oyu-figure img.is-on {
+  opacity: 1;
+  transform: none;
+}
+@keyframes oyu-pop {
+  from {
+    transform: translateY(4px) scale(0.94);
+    opacity: 0.4;
+  }
+}
+@keyframes oyu-float {
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.oyu-score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.oyu-score small {
+  font-size: 12px;
+  font-weight: 500;
+  opacity: 0.75;
+}
+
+.oyu-bars {
+  display: grid;
+  gap: 6px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.oyu-bars li {
+  display: grid;
+  grid-template-columns: 124px 1fr 28px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.oyu-bars i {
+  height: 4px;
+  border-radius: var(--r-pill);
+  background:
+    linear-gradient(var(--accent), var(--accent)) 0 0 / var(--value) 100% no-repeat,
+    var(--surface-2);
+}
+.oyu-bars b {
+  font-weight: 600;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.oyu-thumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.oyu-thumb {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  padding: 0;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--image-bg);
+}
+.oyu-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  mix-blend-mode: darken;
+}
+
+/* Inline note on pages */
+.oyu-note {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  align-items: start;
+  gap: 12px;
+}
+.oyu-note-avatar {
+  width: 52px;
+  height: 58px;
+}
+.oyu-note-body {
+  min-width: 0;
+  padding: 12px 14px;
+  border-radius: 4px var(--r-lg) var(--r-lg) var(--r-lg);
+  background: var(--surface-2);
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.oyu-note-body > p {
+  margin: 0;
+}
+.oyu-note-body > p + p {
+  margin-top: 4px;
+}
+.oyu-note-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px !important;
+}
+.oyu-note-head strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+.oyu-sub {
+  margin-top: 12px !important;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.oyu-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+/* Floating companion */
+.oyu-companion {
+  position: fixed;
+  right: 24px;
+  bottom: 20px;
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+  pointer-events: none;
+}
+.oyu-companion > * {
+  pointer-events: auto;
+}
+.oyu-companion.is-hidden {
+  display: none;
+}
+.oyu-dock {
+  position: relative;
+  width: 92px;
+  height: 104px;
+  padding: 0;
+  background: none;
+  filter: drop-shadow(0 10px 16px rgb(26 24 20 / 20%));
+  transition: transform 0.2s var(--ease);
+  /* She bounces in when the app opens. */
+  animation: oyu-arrive 0.9s var(--ease) 0.25s backwards;
+}
+/* A soft pulsing halo while she has something to say. */
+.oyu-dock::before {
+  content: '';
+  position: absolute;
+  inset: 8% 4% 4%;
+  z-index: -1;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  opacity: 0;
+}
+.oyu-companion.has-nudge .oyu-dock::before {
+  animation: oyu-halo 1.8s ease-out infinite;
+}
+.oyu-dock-body {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 90%;
+}
+.oyu-dock-body.is-waving {
+  animation: oyu-wave 1.4s ease-in-out;
+}
+.oyu-dock-name {
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  padding: 1px 9px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  transform: translateX(-50%);
+}
+/* The float lives on the figure so the button's own hover lift still shows. */
+.oyu-dock .oyu-figure {
+  animation: oyu-float 3.6s ease-in-out infinite;
+}
+.oyu-dock:hover {
+  transform: translateY(-4px) scale(1.06);
+}
+.oyu-dock:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: var(--r-md);
+}
+.oyu-teaser {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  max-width: 260px;
+  padding: 10px 8px 10px 14px;
+  border-radius: var(--r-lg) var(--r-lg) 4px var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-pop);
+  animation: oyu-pop 0.4s var(--ease);
+}
+.oyu-teaser-text {
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: left;
+}
+.oyu-teaser-close {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-3);
+}
+.oyu-teaser-close:hover {
+  background: var(--surface-2);
+}
+
+.oyu-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(392px, calc(100vw - 32px));
+  height: min(620px, calc(100dvh - 140px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  background: var(--surface);
+  box-shadow: var(--shadow-dialog);
+  animation: oyu-panel-in 0.24s var(--ease);
+  transform-origin: bottom right;
+}
+@keyframes oyu-panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+.oyu-panel-head {
+  display: grid;
+  grid-template-columns: 44px 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 14px 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.oyu-panel-avatar {
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--image-bg);
+}
+.oyu-panel-avatar .oyu-figure {
+  width: 130%;
+  height: 130%;
+  margin: -2px 0 0 -15%;
+}
+.oyu-panel-avatar .oyu-figure img {
+  object-fit: cover;
+  object-position: 50% 8%;
+}
+.oyu-panel-head h2 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+.oyu-panel-head p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.oyu-thread {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  flex: 1;
+  padding: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.oyu-intro {
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  align-items: center;
+  gap: 14px;
+  overflow: hidden;
+  padding-right: 16px;
+  border-radius: var(--r-md);
+  background: var(--image-bg);
+}
+.oyu-intro img {
+  width: 112px;
+  height: 120px;
+  object-fit: cover;
+  object-position: 50% 0;
+}
+.oyu-intro p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.oyu-msg {
+  animation: oyu-pop 0.3s var(--ease);
+}
+.oyu-msg.is-me {
+  justify-self: end;
+}
+.oyu-msg-me {
+  margin: 0;
+  max-width: 260px;
+  padding: 8px 14px;
+  border-radius: var(--r-lg) var(--r-lg) 4px var(--r-lg);
+  background: var(--ink);
+  color: var(--bg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+.oyu-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
+  max-height: 172px;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+.oyu-picker .oyu-thumb {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  transition: box-shadow 0.15s var(--ease);
+}
+.oyu-picker .oyu-thumb:hover,
+.oyu-picker .oyu-thumb:focus-visible {
+  box-shadow: 0 0 0 2px var(--ink);
+  outline: none;
+}
+.oyu-looks {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.oyu-looks button {
+  display: block;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  transition: border-color 0.15s var(--ease);
+}
+.oyu-looks button:hover {
+  border-color: var(--ink);
+}
+.oyu-looks strong {
+  font-size: 14px;
+  font-weight: 600;
+}
+.oyu-looks .oyu-thumbs {
+  margin-top: 6px;
+}
+.oyu-looks .oyu-thumb {
+  width: 36px;
+  height: 36px;
+}
+.oyu-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--line);
+}
+.oyu-chips button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  transition:
+    background 0.15s var(--ease),
+    border-color 0.15s var(--ease);
+}
+.oyu-chips button:hover {
+  border-color: var(--ink);
+  background: var(--surface-2);
+}
+
+/* Live stage */
+.oyu-live {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 3;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  max-width: calc(100% - 32px);
+  pointer-events: none;
+}
+.oyu-live.is-raised {
+  bottom: 100px;
+}
+.oyu-live > * {
+  pointer-events: auto;
+}
+.oyu-live {
+  animation: oyu-slide-in 0.6s var(--ease) backwards;
+}
+.oyu-live-figure {
+  position: relative;
+  width: 100px;
+  height: 110px;
+  padding: 0;
+  background: none;
+  filter: drop-shadow(0 6px 12px rgb(0 0 0 / 35%));
+  animation: oyu-float 3.6s ease-in-out infinite;
+}
+.oyu-live-body {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: 50% 100%;
+}
+/* A little hop when Oyu is pleased; two names so every new beat restarts it. */
+.oyu-live-body[data-beat='0'] {
+  animation: oyu-hop-a 0.55s var(--ease);
+}
+.oyu-live-body[data-beat='1'] {
+  animation: oyu-hop-b 0.55s var(--ease);
+}
+@keyframes oyu-hop-a {
+  35% {
+    transform: translateY(-10px) scale(1.03, 0.98);
+  }
+  70% {
+    transform: translateY(0) scale(1.02, 0.97);
+  }
+}
+@keyframes oyu-hop-b {
+  35% {
+    transform: translateY(-10px) scale(1.03, 0.98);
+  }
+  70% {
+    transform: translateY(0) scale(1.02, 0.97);
+  }
+}
+.oyu-live-figure:focus-visible {
+  outline: 2px solid var(--on-stage);
+  outline-offset: 4px;
+  border-radius: var(--r-md);
+}
+.oyu-live-badge {
+  position: absolute;
+  top: 2px;
+  left: -10px;
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-size: 13px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 25%);
+}
+.oyu-bubble {
+  width: max-content;
+  max-width: min(280px, 100%);
+  padding: 12px 14px;
+  border-radius: var(--r-lg) var(--r-lg) 4px var(--r-lg);
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 30%);
+  font-size: 14px;
+  line-height: 1.5;
+  transform-origin: 100% 100%;
+  animation: oyu-pop 0.32s var(--ease);
+}
+.oyu-bubble.is-thinking {
+  padding: 12px 16px;
+}
+.oyu-dots {
+  display: flex;
+  gap: 5px;
+}
+.oyu-dots i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  animation: oyu-dot 1s ease-in-out infinite;
+}
+.oyu-dots i:nth-child(2) {
+  animation-delay: 0.15s;
+}
+.oyu-dots i:nth-child(3) {
+  animation-delay: 0.3s;
+}
+@keyframes oyu-dot {
+  0%,
+  60%,
+  100% {
+    opacity: 0.35;
+    transform: none;
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-3px);
+  }
+}
+/* Fullscreen is the presenter view: a larger Oyu reads from across the room. */
+.pitch-camera.is-fullscreen .oyu-live {
+  right: 24px;
+  bottom: 24px;
+  transform: scale(1.3);
+  transform-origin: 100% 100%;
+}
+.pitch-camera.is-fullscreen .oyu-live.is-raised {
+  bottom: 112px;
+}
+.oyu-bubble > p {
+  margin: 0;
+}
+.oyu-bubble-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px !important;
+}
+.oyu-bubble-head strong {
+  font-size: 13px;
+  font-weight: 650;
+}
+.oyu-bubble-close {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px -4px auto;
+  padding: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--ink-3);
+}
+.oyu-bubble-close:hover {
+  background: var(--surface-2);
+  color: var(--ink);
+}
+.oyu-bubble-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+  margin-top: 10px;
+}
+.oyu-try {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 4px;
+  border-radius: var(--r-pill);
+  background: var(--primary);
+  color: var(--primary-text);
+  font-size: 13px;
+  font-weight: 600;
+}
+.oyu-try:hover {
+  background: var(--primary-hover);
+}
+.oyu-try .oyu-thumb {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+}
+.oyu-rate {
+  padding: 0;
+  background: none;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.oyu-rate:hover {
+  color: var(--accent);
+}
+.oyu-toggle img {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: 50% 10%;
+  background: var(--image-bg);
+}
+.oyu-toggle:not(.is-on) img {
+  filter: grayscale(1);
+  opacity: 0.55;
+}
+
+/* Outfit check: pick what you wear, Oyu rates it as it comes together */
+.outfit-check {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 28px;
+}
+.outfit-check-pick > .muted {
+  margin: 0 0 14px;
+  font-size: 14px;
+  color: var(--ink-2);
+}
+.outfit-check-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.outfit-check-tabs .chip svg {
+  color: var(--accent);
+}
+.outfit-check-tabs .chip.active svg {
+  color: inherit;
+}
+.outfit-check-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 8px;
+  max-height: 420px;
+  padding: 2px 4px 2px 2px;
+  overflow-y: auto;
+}
+.outfit-check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px 12px 8px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  text-align: left;
+  transition: border-color 0.15s var(--ease);
+}
+.outfit-check-item:hover {
+  border-color: var(--line-strong);
+}
+.outfit-check-item.selected {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.outfit-check-item > span:nth-child(2) {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.outfit-check-item small {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.outfit-check-item > svg {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.outfit-check-review {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+.outfit-check-look {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 0;
+  padding: 6px 0 0;
+  list-style: none;
+}
+.outfit-check-look li {
+  position: relative;
+}
+.outfit-check-look .wear-thumb {
+  width: 56px;
+  height: 56px;
+}
+.outfit-check-look button {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--ink);
+  color: var(--bg);
+}
+.outfit-check-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  margin-top: 12px;
+  padding: 6px 12px 6px 6px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: left;
+  transition: border-color 0.15s var(--ease);
+}
+.outfit-check-add:hover {
+  border-color: var(--ink);
+}
+.outfit-check-add > span:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.outfit-check-add small {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-3);
+}
+.outfit-check-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.outfit-check-photo {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.outfit-check-photo .text-link {
+  display: inline;
+  font-size: inherit;
+}
+.outfit-check-peek {
+  display: none;
+}
+
+/* Oyu in motion: a spotlight on the stage, talking, thinking and hearts for a loved piece. */
+.oyu-live-glow {
+  position: absolute;
+  inset: -22% -30% -8%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, rgb(255 238 214 / 34%), transparent);
+  pointer-events: none;
+  animation: oyu-glow 3.6s ease-in-out infinite;
+}
+.oyu-live-body > .oyu-figure {
+  transform-origin: 50% 92%;
+}
+.oyu-live-body.is-talking > .oyu-figure {
+  animation: oyu-talk 0.42s ease-in-out infinite;
+}
+.oyu-live-body.is-thinking > .oyu-figure {
+  animation: oyu-ponder 1.8s ease-in-out infinite;
+}
+.oyu-hearts {
+  position: absolute;
+  top: 6%;
+  left: 50%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+.oyu-hearts svg {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  color: #e36f86;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 25%));
+  opacity: 0;
+  animation: oyu-heart 1.6s ease-out forwards;
+}
+.oyu-hearts svg:nth-child(1) {
+  --dx: -34px;
+  animation-delay: 0.15s;
+}
+.oyu-hearts svg:nth-child(2) {
+  --dx: 4px;
+  width: 22px;
+  height: 22px;
+  animation-delay: 0.35s;
+}
+.oyu-hearts svg:nth-child(3) {
+  --dx: 36px;
+  animation-delay: 0.55s;
+}
+.oyu-typed-rest {
+  visibility: hidden;
+}
+.oyu-note-avatar .oyu-figure {
+  transform-origin: 50% 90%;
+  animation: oyu-wave 1.2s ease-in-out 0.3s;
+}
+@keyframes oyu-arrive {
+  0% {
+    opacity: 0;
+    transform: translateY(40px) scale(0.6);
+  }
+  60% {
+    opacity: 1;
+    transform: translateY(-10px) scale(1.05);
+  }
+  80% {
+    transform: translateY(3px) scale(0.98);
+  }
+}
+@keyframes oyu-wave {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  20% {
+    transform: rotate(-9deg);
+  }
+  40% {
+    transform: rotate(7deg);
+  }
+  60% {
+    transform: rotate(-5deg);
+  }
+  80% {
+    transform: rotate(3deg);
+  }
+}
+@keyframes oyu-halo {
+  0% {
+    opacity: 0.6;
+    transform: scale(0.75);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+@keyframes oyu-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(28px);
+  }
+}
+@keyframes oyu-glow {
+  50% {
+    opacity: 0.6;
+    transform: scale(0.94);
+  }
+}
+@keyframes oyu-talk {
+  0%,
+  100% {
+    transform: translateY(0) scale(1);
+  }
+  30% {
+    transform: translateY(-4px) scale(1.015, 0.985);
+  }
+  60% {
+    transform: translateY(0) scale(0.99, 1.01);
+  }
+}
+@keyframes oyu-ponder {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  50% {
+    transform: rotate(-5deg);
+  }
+}
+@keyframes oyu-heart {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0) scale(0.4);
+  }
+  20% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(calc(-50% + var(--dx)), -76px) scale(1);
+  }
+}
+
+@media (max-width: 740px) {
+  .outfit-check {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+  .outfit-check-grid {
+    grid-template-columns: 1fr;
+    max-height: 300px;
+  }
+  .outfit-check-item .wear-thumb {
+    width: 40px;
+    height: 40px;
+  }
+  .outfit-check-peek {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    margin-top: 12px;
+    padding: 8px 10px 8px 8px;
+    border: 1px solid var(--line-strong);
+    border-radius: var(--r-md);
+    background: var(--surface);
+    box-shadow: var(--shadow-pop);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 600;
+    text-align: left;
+  }
+  .outfit-check-peek > span:nth-child(2) {
+    flex: 1;
+  }
+  .outfit-check-peek-pieces {
+    display: flex;
+    gap: 4px;
+  }
+  .outfit-check-peek .wear-thumb {
+    width: 32px;
+    height: 32px;
+    padding: 2px;
+  }
+  .oyu-companion {
+    right: 12px;
+    bottom: 12px;
+  }
+  .oyu-dock {
+    width: 72px;
+    height: 80px;
+  }
+  .oyu-panel {
+    height: min(600px, calc(100dvh - 110px));
+  }
+  .oyu-live {
+    right: 10px;
+    bottom: 10px;
+    max-width: calc(100% - 20px);
+  }
+  .oyu-live.is-raised {
+    bottom: 92px;
+  }
+  .oyu-live-figure {
+    width: 72px;
+    height: 79px;
+  }
+  .oyu-bubble {
+    font-size: 13px;
+  }
+  .oyu-bars li {
+    grid-template-columns: 116px 1fr 28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .oyu-dock,
+  .oyu-dock .oyu-figure,
+  .oyu-dock-body.is-waving,
+  .oyu-companion.has-nudge .oyu-dock::before,
+  .oyu-live,
+  .oyu-live-glow,
+  .oyu-live-body > .oyu-figure,
+  .oyu-note-avatar .oyu-figure,
+  .oyu-live-figure,
+  .oyu-live-body[data-beat],
+  .oyu-bubble,
+  .oyu-dots i,
+  .oyu-msg,
+  .oyu-panel,
+  .oyu-teaser {
+    animation: none;
+  }
+  .oyu-figure img {
+    transition: none;
+  }
+  .oyu-hearts {
+    display: none;
+  }
+}

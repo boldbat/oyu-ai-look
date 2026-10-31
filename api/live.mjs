@@ -12,6 +12,11 @@ if (process.env.VERCEL_URL) allowedOrigins.push(`https://${process.env.VERCEL_UR
 const bridge = createDecartBridge({
   apiKey: allowedEmails.length ? process.env.DECART_API_KEY : '',
   model: process.env.DECART_MODEL || 'lucy-vton-3.6',
+  // Vercel ends the function after maxDuration (vercel.json), so hosted sessions stop there.
+  maxSessionSeconds: process.env.DECART_MAX_SESSION_SECONDS
+    ? Number(process.env.DECART_MAX_SESSION_SECONDS)
+    : null,
+  speed: process.env.DECART_SPEED === 'fast' ? 'fast' : 'standard',
   allowRemote: true,
   allowedOrigins,
   directSocket: true,
